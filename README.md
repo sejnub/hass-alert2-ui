@@ -14,7 +14,7 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 
 1. Click the button below or visit the HACS pane and add `https://github.com/redstone99/hass-alert2-ui.git` as an `Dashboard` by following [these instructions](https://hacs.xyz/docs/faq/custom_repositories/).
 
-    [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=redstone99&repository=hass-alert2-ui&category=dashboard)
+    [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=redstone99&repository=hass-alert2-ui&category=plugin)
 
 1. Install the dashboard component.
 
@@ -22,7 +22,7 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 
 ### Manual install
 
-1. Download the `alert2.js` file from the repository [release section](https://github.com/redstone99/hass-alert2-ui/releases) and extract it.
+1. Download the `Source code.zip` file from the repository [release section](https://github.com/redstone99/hass-alert2-ui/releases) and unzip it.
 
    We do not recommend downloading directly from the `main` branch.
 
@@ -30,7 +30,7 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 
    Your configuration directory is the directory with `configuration.yaml`. It is commonly `/config`, or may be something like `~/.home-assistant/` for Linux installations.
    
-1. Copy `alert2.js` from the `www` directory in this project into the directory `www` in your config.
+1. Copy `alert2.js` from unzipped archive into the directory `www` in your config.
 
    Your config directory should look similar to this after copying:
    
