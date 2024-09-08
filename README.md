@@ -1,4 +1,4 @@
-<!-- ~/tmp/general-env/bin/grip -b ~/tmp/hass-alert2-ui/README.md -->
+<!-- ~/tmp/general-env/bin/grip -b ~/tmp/hass-alert2-ui/README.md 6420 -->
 
 # Alert2 UI
 
@@ -12,11 +12,15 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 
 1. If HACS is not installed, follow HACS installation and configuration at https://hacs.xyz/.
 
-1. Click the button below or visit the HACS pane and add `https://github.com/redstone99/hass-alert2-ui.git` as an `Dashboard` by following [these instructions](https://hacs.xyz/docs/faq/custom_repositories/).
+1. Click the button below
 
     [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=redstone99&repository=hass-alert2-ui&category=plugin)
 
-1. Install the dashboard component.
+    or visit the HACS pane and add `https://github.com/redstone99/hass-alert2-ui.git` as a custom repository of type `Dashboard` by following [these instructions](https://hacs.xyz/docs/faq/custom_repositories/).
+
+1. You should be on the "Alert2 UI" doc page in HACS. Click "Download" button (bottom right of screen) to download the dashboard module.  If for some reason adding the repository did not take you to the "Alert2 UI" doc page, you may need to click again on the HACS pane, search for "Alert2 UI" and click on it to get to the page.
+
+Click "Download" button (bottom right of screen) to download the dashboard component.
 
 1. Reload the UI
 
@@ -33,7 +37,7 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 1. Copy `alert2.js` from unzipped archive into the directory `www` in your config.
 
    Your config directory should look similar to this after copying:
-   
+                   
         <config dir>/configuration.yaml
         <config dir>/www/alert2.js
         <config dir>/custom_components/alert2/__init__.py
@@ -42,29 +46,44 @@ This repository contains a HomeAssistant Lovelace module that includes a card to
 
 ## Setup
 
-Setup is done through editing your `configuration.yaml` file.
+The install process above downloaded a js module, `alert2.js`.
 
-1. If you're configuring Lovelace in YAML mode, add the two lines in bold to the `resources` subsection of the lovelace section of `configuration.yaml`:
+1. If you installed Alert2 UI through HACS and manage Lovelace using the default `storage` mode, then `alert2.js` should be loaded into HA automatically.
+
+    Otherwise:
+
+    If you installed Alert2 UI manually and manage Lovelace using the default `storage` mode, then enable "Advanced mode" in your user profile, then click on Settings -> Dashboards -> Resources.  "Resources" may appear only in the triple vertical dots on the upper right of the dashboards page. Click on "Add Resource" to add `alert2.js`.
+
+    If you manage Lovelace in `yaml` mode, you need to add an entry for `alert2.js` in the resources subsection of the lovelace section of your `configuration.yaml`. If you installed via HACS, this will look like (in bold):
+
+    <pre>lovelace:
+      mode: yaml
+      resources:
+        <b>- url: /hacsfiles/hass-alert2-ui/alert2.js</b>
+          <b>type: module</b>
+        ...</pre>
+
+    or if you installed manually, it will look like:
 
     <pre>lovelace:
       mode: yaml
       resources:
         <b>- url: /local/alert2.js</b>
-          <b>type: module</b></pre>
+          <b>type: module</b>
+        ...</pre>
 
 
-    If you configure Lovelace via the UI, then enable "Advanced mode" in your user profile, then click on Settings -> Dashboards -> Resources.  "Resources" may appear only in the triple vertical dots on the upper right of the dashboards page. Click on "Add Resource".
+1. `alert2.js` defines a custom UI card called `custom:alert2-overview`. If you are using the UI to manage your dashboards, after you click on "Add Card", you'll manually add a card of type `custom:alert2-overview`.
 
+    If you're using yaml to specify a dashboard, you can add this card to your dashboard by adding it to the list of cards in a view, like (in bold):
 
-1. `alert2.js` defines a custom UI card called `alert2-overview`. If you are using the yaml config for lovelace, you can add this card to your dashboard by adding it to the list of cards in a view, like (in bold):
-
-<pre>views:
-- title: Monitoring
-  name: Example
-  cards:
-  <b>- type: "custom:alert2-overview"</b>
-  - type: entities
-    ...</pre>
+    <pre>views:
+    - title: Monitoring
+      name: Example
+      cards:
+      <b>- type: "custom:alert2-overview"</b>
+      - type: entities
+        ...</pre>
 
 
 1. Restart HomeAssistant and reload the UI
