@@ -163,13 +163,18 @@ class Alert2Overview extends LitElement {
             element.hass = this.hass;
         }
         let outerThis = this;
+        let friendlyName = this.hass.states[entityName].attributes.friendly_name2;
         // hui-generic-entity-row calls handleAction on events, including clicks.
         // we set the action to take on 'tap' to be 'fire-dom-event', which generates a 'll-custom' event
         // NOTE - the hui- code gobbles up the click event and on chrome-mobile seems to gobble up clicks on an 'ack' button as well :(,
         // and further, the ll-custom event does not include information on which element was originally clicked on. :(
         //
         //element.addEventListener('ll-custom', (ev)=>outerThis._alertClick(ev, entityName));
-        element.addEventListener('click', (ev)=>outerThis._alertClick(ev, entityName));
+        if (entityConf.entity.startsWith('alert.')) {
+            // it already has a built-in more-info click listener
+        } else {
+            element.addEventListener('click', (ev)=>outerThis._alertClick(ev, entityName, friendlyName));
+        }
         //element.addEventListener('click', this.anev2);
         //console.log('foo2', element);
         //console.log('ick', element.shadowRoot.querySelector('hui-generic-entity-row'));
@@ -182,14 +187,20 @@ class Alert2Overview extends LitElement {
    // anev2(ev) {
     //    console.log('anev2', ev);
     //}
-    _alertClick(ev, entityName) {
+    _alertClick(ev, entityName, friendlyName) {
         let style = '';
 
         //let e = ev || window.event;
         //let srcElem = e.target || e.srcElement;
         //console.log('click4', srcElem, ev, ev.srcElement.nodeName, ev.target.nodeName, srcElem.nodeName);
         let cardTools = customElements.get('card-tools');
-        let x = cardTools.popUp('Alert2 info for ' + entityName, { type: 'custom:more-info-alert2-container', entityName: entityName }, true, style);
+        let title = 'Alert2 info for ';
+        if (friendlyName) {
+            title += `"${friendlyName}" (entity ${entityName})`;
+        } else {
+            title += entityName;
+        }
+        let x = cardTools.popUp(title, { type: 'custom:more-info-alert2-container', entityName: entityName }, true, style);
         x.then(()=>{
             // dialog has been opened
         });
@@ -245,11 +256,14 @@ class Alert2Overview extends LitElement {
         for (let entityName in this.hass.states) {
             if (entityName.startsWith('alert.')) {
                 let ent = this.hass.states[entityName];
-                if (ent.state !== 'idle') {
-                    entities.set(entityName, nowSecs);
-                } else if (ent.attributes.snooze_until == 'notifications-disabled') {
-                    entities.set(entityName, nowSecs);
-                } else if (ent.attributes.snooze_until != 'notifications-enabled') {
+                if (ent.state == 'idle') {
+                    let lastOffSecs = Date.parse(ent.last_changed) / 1000.0;
+                    let agoSecs = nowSecs - lastOffSecs;
+                    if (agoSecs < intervalSecs) {
+                        //entities.set(entityName, nowSecs);
+                    }
+                } else if (ent.state == 'on') {
+                    //console.log('Adding old ', entityName);
                     entities.set(entityName, nowSecs);
                 }
             } else if (entityName.startsWith('alert2.')) {
@@ -279,8 +293,10 @@ class Alert2Overview extends LitElement {
                                          (ent.attributes.notification_control != NOTIFICATIONS_ENABLED));
                     let agoSecs = nowSecs - lastFireSecs;
                     if (agoSecs < intervalSecs) {
+                        //console.log('Adding new recent ', entityName);
                         entities.set(entityName, lastFireSecs);
                     } else if (not_enabled) {
+                        //console.log('Adding new disabled ', entityName);
                         entities.set(entityName, lastFireSecs);
                     }
                 }
@@ -348,7 +364,14 @@ class Alert2EntityRow extends LitElement  {
         </hui-warning>
       `;
         }
-        let entHtml = stateObj.entity_id.split('_').map((x,idx,arr)=>(idx < arr.length-1)? html`${x}_<wbr/>` : html`${x}`);
+        //let entHtml = '';
+        //console.log('foo', this._config);
+        const friendlyName = this._hass.states[this._config.entity].attributes.friendly_name2;
+        //console.log('foo3', this._hass.states[this._config.entity]);
+        //console.log('foo3b', this._hass.states[this._config.entity].attributes);
+        //console.log('foo2b', friendlyName);
+        let nameToUse = friendlyName ? friendlyName : stateObj.entity_id;
+        const entHtml = nameToUse.split('_').map((x,idx,arr)=>(idx < arr.length-1)? html`${x}_<wbr/>` : html`${x}`);
         
         // This is essentially the guts of hui-generic-entity-row, except it does not swallow click events, like hui-generic-entity-row does (and converts it to ll-custom).  That means we can react to a click on a 'Ack' button in a row entity.
         return html`

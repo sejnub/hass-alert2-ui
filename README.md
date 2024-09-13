@@ -92,7 +92,9 @@ The install process above downloaded a js module, `alert2.js`.
 
 ## Usage
 
-The `alert2-overview` Lovelace card lists recently active alerts, as well as snoozed or disabled alerts.  A slider at the top of the card controls the time window covered. Each line shows the status of the alert, including when it last fired, how many times it fired since the last notification, and whether it has been ack'ed, snoozed or disabled.  Each alert will show an "ACK" button if it hasn't been acked already. The button "ACK ALL" will ack all alerts, not just the ones displayed.
+The `alert2-overview` Lovelace card lists recently active Alert2 alerts, as well as snoozed or disabled alerts.  A slider at the top of the card controls the time window covered. Each line shows the status of the alert, including when it last fired, how many times it fired since the last notification, and whether it has been ack'ed, snoozed or disabled.  Each alert will show an "ACK" button if it hasn't been acked already. The button "ACK ALL" will ack all alerts, not just the ones displayed.
+
+Note - `alert2-overview` will show currently firing old Alert-1 alerts, but it will not show recent activity for the old alerts.
 
 ![Alert2 overview card](resources/overview.png)
 
