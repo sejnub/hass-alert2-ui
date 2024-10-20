@@ -113,3 +113,13 @@ The "Notifications" section lets you snooze or disable notifications. Select an 
 ### Other ways to view alerts
 
 You may also add alert2 entities to entities cards and other cards that support entities.  If you click on an alert shown in such a situation, you'll see a popup (called a "more-info dialog") similar to the one shown above.  However, since Alert2 isn't integrated into the core HomeAssistant, that dialog will include some extra default sections like "history", but will also include the sections described above.
+
+Finally, you can also view alert information by going to Settings -> Devices & Services -> Entities, typing "alert2." in the search box and browsing the list.  Clicking on one will popup the "more-info dialog".
+
+## Upgrading
+
+After upgrading Alert2 UI, it can take time for the browser or HA companion app to update alert2.js.  To speed that up:
+
+* On the web, try reloading the page a few times or "Clear cookies & site data".
+
+* On the Android HA companion app, try going to System Settings -> Apps -> Home Assitant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.

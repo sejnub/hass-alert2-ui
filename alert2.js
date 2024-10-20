@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-console.log('alert2 v1');
+console.log('alert2 v1.7');
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -163,7 +163,6 @@ class Alert2Overview extends LitElement {
             element.hass = this.hass;
         }
         let outerThis = this;
-        let friendlyName = this.hass.states[entityName].attributes.friendly_name2;
         // hui-generic-entity-row calls handleAction on events, including clicks.
         // we set the action to take on 'tap' to be 'fire-dom-event', which generates a 'll-custom' event
         // NOTE - the hui- code gobbles up the click event and on chrome-mobile seems to gobble up clicks on an 'ack' button as well :(,
@@ -173,7 +172,7 @@ class Alert2Overview extends LitElement {
         if (entityConf.entity.startsWith('alert.')) {
             // it already has a built-in more-info click listener
         } else {
-            element.addEventListener('click', (ev)=>outerThis._alertClick(ev, entityName, friendlyName));
+            element.addEventListener('click', (ev)=>outerThis._alertClick(ev, element, entityName));
         }
         //element.addEventListener('click', this.anev2);
         //console.log('foo2', element);
@@ -181,28 +180,14 @@ class Alert2Overview extends LitElement {
         //return html`<div class="jEvWrapper" @click=${this.anev1} >${element}</div>`;
         return html`<div class="jEvWrapper">${element}</div>`;
     }
-    //anev1(ev) {
-        //console.log('anev1', ev);
-   // }
-   // anev2(ev) {
-    //    console.log('anev2', ev);
-    //}
-    _alertClick(ev, entityName, friendlyName) {
-        let style = '';
-
-        //let e = ev || window.event;
-        //let srcElem = e.target || e.srcElement;
-        //console.log('click4', srcElem, ev, ev.srcElement.nodeName, ev.target.nodeName, srcElem.nodeName);
-        let cardTools = customElements.get('card-tools');
-        let title = 'Alert2 info for ';
-        if (friendlyName) {
-            title += `"${friendlyName}" (entity ${entityName})`;
-        } else {
-            title += entityName;
-        }
-        let x = cardTools.popUp(title, { type: 'custom:more-info-alert2-container', entityName: entityName }, true, style);
-        x.then(()=>{
-            // dialog has been opened
+    _alertClick(ev, element, entityName) {
+        jFireEvent(element, "show-dialog", {
+            dialogTag: "more-info-alert2-container",
+            dialogImport: () => new Promise((resolve)=> { resolve(); }),
+            dialogParams: {
+                entityName: entityName,
+            },
+            addHistory: true
         });
         return true;
     }
@@ -497,13 +482,7 @@ class HaAlert2State extends LitElement {
         }
     }
     _showToast(amsg) {
-        const event = new Event("hass-notification", {
-            bubbles: true,
-            cancelable: false,
-            composed: true,
-        });
-        event.detail = { message: amsg };
-        this.dispatchEvent(event);
+        jFireEvent(this, "hass-notification", { message: amsg });
     }
     async _jack(ev) {
         console.log('_jack clicked');
@@ -679,10 +658,20 @@ function strIsValidNumber(astr) {
         return val;
     } else { return null; }
 }
+function jFireEvent(elem, evName, params) {
+    const event = new Event(evName, {
+        bubbles: true,
+        cancelable: Boolean(false),
+        composed: true,
+    });
+    event.detail = params;
+    elem.dispatchEvent(event);
+}
 
 // Add this attribute to alert entity attributes:
 // 'custom_ui_more_info' : 'more-info-alert2', # name of UI element that must be defined
 //
+// Similar to ha-more-info-info from src/dialogs/more-info/ha-more-info-info.ts
 class MoreInfoAlert2 extends LitElement {
     static properties = {
         hass: { attribute: false,
@@ -726,6 +715,9 @@ class MoreInfoAlert2 extends LitElement {
         customElements.whenDefined('state-card-alert2').then(()=>{
             this.requestUpdate();
         });
+    }
+    showDialog(dialogParams) {
+        console.log('MoreInfoAlert2 showDialog called', dialogParams);
     }
     fetchPrev() {
         const msAgo = 24*60*60*1000.0;
@@ -845,14 +837,15 @@ class MoreInfoAlert2 extends LitElement {
                     ${this._historyArr.map((elem) => rHist(elem) )}</table>`;
             }
         }
-        return html`<div style="margin-bottom:2em;">
+        return html`
+         <div class="container" >
             <state-card-content
               in-dialog
               .stateObj=${this.stateObj}
               .hass=${this.hass}
             ></state-card-content>
             <div id="previousFirings" style="margin-top: 1em;">
-                <div style="display: flex; margin-top: 2em; margin-bottom: 1em; align-items: center;">
+               <div style="display: flex; margin-top: 2em; margin-bottom: 1em; align-items: center;">
                   <div class="title">Previous Firings</div>
                   <div style="flex: 1 1 0; max-width: 10em;"></div>
                   <ha-progress-button
@@ -863,27 +856,27 @@ class MoreInfoAlert2 extends LitElement {
                     .progress=${this._fetchCurrInProgress}
                     @click=${this.fetchCurr}
                   >Reset</ha-progress-button>
-                </div>
-                <div class="alist">
-                ${historyHtml}
-                </div>
+               </div>
+               <div class="alist">
+                  ${historyHtml}
+               </div>
             </div>
             <div class="title" style="margin-top: 1em;">Notifications</div>
-              <div style="margin-bottom: 0.3em;">Status: ${notification_status}</div>
-              <div><ha-formfield .label=${"Enable"}>
+            <div style="margin-bottom: 0.3em;">Status: ${notification_status}</div>
+            <div><ha-formfield .label=${"Enable"}>
                   <ha-radio
                       .checked=${NOTIFICATIONS_ENABLED == this._currValue}
                       .value=${NOTIFICATIONS_ENABLED}
                       .disabled=${false}
                       @change=${this._valueChanged}
                       ></ha-radio></ha-formfield></div>
-              <div><ha-formfield .label=${"Disable"}><ha-radio
+            <div><ha-formfield .label=${"Disable"}><ha-radio
                   .checked=${NOTIFICATIONS_DISABLED == this._currValue}
                   .value=${NOTIFICATIONS_DISABLED}
                   .disabled=${false}
                   @change=${this._valueChanged}
                   ></ha-radio></ha-formfield></div>
-              <div style="margin-bottom:1em;"><ha-formfield id="for-snooze">
+            <div style="margin-bottom:1em;"><ha-formfield id="for-snooze">
                   <ha-radio
                       id="rad1"
                       .checked=${is_snoozed}
@@ -905,18 +898,19 @@ class MoreInfoAlert2 extends LitElement {
                           @input=${this._handleInputChange}
                           ></ha-textfield>
                   </div>
-              </ha-formfield></div>
-              <ha-progress-button
+              </ha-formfield>
+            </div>
+            <ha-progress-button
                   .progress=${this._requestInProgress}
                   @click=${this._jupdate}>Update</ha-progress-button>
-            </div>
             <br/><br/>
             <ha-attributes
                 .hass=${this.hass}
                 .stateObj=${this.stateObj}
                 ></ha-attributes>
-        </div>`;
+         </div>`;
     }
+    //let par = customElements.get("ha-more-info-info").styles;
     static styles = css`
     table {
       /*border-collapse: separate;*/
@@ -928,6 +922,7 @@ class MoreInfoAlert2 extends LitElement {
     }
     td.eventtime {
        word-break: break-all;
+       min-width: 4em;
     }
     div#slabel {
       pointer: default;
@@ -936,6 +931,10 @@ class MoreInfoAlert2 extends LitElement {
       margin-left: 1em;
       margin-right: 1em;
     }
+    .container {
+        /* padding: 24px; */
+        margin-bottom: 1em;
+     }
         .title {
           font-family: var(--paper-font-title_-_font-family);
           -webkit-font-smoothing: var(
@@ -961,13 +960,7 @@ class MoreInfoAlert2 extends LitElement {
         this._currValue = value;
     }
     _showToast(amsg) {
-        const event = new Event("hass-notification", {
-            bubbles: true,
-            cancelable: false,
-            composed: true,
-        });
-        event.detail = { message: amsg };
-        this.dispatchEvent(event);
+        jFireEvent(this, "hass-notification", { message: amsg });
     }
     async _jupdate(ev) {
         console.log('submit clicked', this._currValue, this);
@@ -1049,20 +1042,33 @@ class MoreInfoAlert2 extends LitElement {
     }
 }
 
+// Similar to ha-more-info-dialog from src/dialogs/more-info/ha-more-info-dialog.ts
 class MoreInfoAlert2Container extends LitElement {
     static properties = {
+        open: {},
+        large: {reflect: true, type: Boolean},
         hass: { attribute: false },
     }
     constructor() {
         super();
         this.config = null;
+        this.large = true;
+    }
+    showDialog(dialogParams) {
+        //console.log('MoreInfoAlert2Container showDialog called', dialogParams);
+        this.open = true;
+        this.setConfig(dialogParams);
+    }
+    closeDialog() {
+        this.open = false;
+        jFireEvent(this, "dialog-closed", { dialog: this.localName });
     }
     setConfig(config) {
         this.config = config;
     }
     connectedCallback() {
         super.connectedCallback();
-        this.getRootNode().querySelector('div.content').style.maxWidth = '60em';
+        //this.getRootNode().querySelector('div.content').style.maxWidth = '60em';
     }
     disconnectedCallback() {
         super.disconnectedCallback();
@@ -1078,41 +1084,107 @@ class MoreInfoAlert2Container extends LitElement {
         if (!this.config) {
             return html`<div>waiting for config</div>`;
         }
+        if (!this.open) {
+            return html``;
+        }
         let stateObj = this.hass.states[this.config.entityName];
-        let title = "my title";
+        let title = '';
+        let friendlyName = stateObj.attributes.friendly_name2;
+        let entityName = this.config.entityName;
+        if (friendlyName) {
+            title += `"${friendlyName}" (entity ${entityName})`;
+        } else {
+            title += entityName;
+        }
         return html`
-           <ha-card>
-              <div class="card-content">
-                   <more-info-alert2
+           <ha-dialog open @closed=${this.closeDialog} .heading=${true} hideActions flexContent  >
+              <ha-dialog-header slot="heading">
+                <mwc-icon-button .label=${"dismiss"} dialogAction="cancel" slot="navigationIcon" ><ha-icon .icon=${"mdi:close"} ></ha-icon>
+                  </mwc-icon-button>
+                <span class="main-title" slot="title" .title=${title} > ${title} </span>
+              </ha-dialog-header>
+              <div class="content" tabindex="-1" dialogInitialFocus>
+                   <more-info-alert2  dialogInitialFocus
                        .stateObj=${stateObj}
                        .hass=${this.hass} ></more-info-alert2>
              </div>
-           </ha-card>
+           </ha-dialog>
         `;
     }
     static styles = css`
-        ha-dialog {
-          /* Set the top top of the dialog to a fixed position, so it doesnt jump when the content changes size */
-          --vertical-align-dialog: flex-start;
-          --dialog-surface-margin-top: 40px;
-          /* This is needed for the tooltip of the history charts to be positioned correctly */
-          --dialog-surface-position: static;
-          --dialog-content-position: static;
-          --dialog-content-padding: 0;
-          --chart-base-position: static;
-        }
-
         .content {
           display: flex;
           flex-direction: column;
           outline: none;
           flex: 1;
         }
+        /********** below is from https://github.com/thomasloven/lovelace-card-tools/blob/master/src/popup.js ***/
+          ha-dialog {
+            --mdc-dialog-min-width: 400px;
+            --mdc-dialog-max-width: 600px;
+            --mdc-dialog-heading-ink-color: var(--primary-text-color);
+            --mdc-dialog-content-ink-color: var(--primary-text-color);
+            --justify-action-buttons: space-between;
+          }
+          @media all and (max-width: 450px), all and (max-height: 500px) {
+            ha-dialog {
+              --mdc-dialog-min-width: 100vw;
+              --mdc-dialog-max-width: 100vw;
+              --mdc-dialog-min-height: 100%;
+              --mdc-dialog-max-height: 100%;
+              --mdc-shape-medium: 0px;
+              --vertial-align-dialog: flex-end;
+            }
+          }
+
+          ha-dialog-header {
+            flex-shrink: 0;
+            color: var(--primary-text-color);
+            background-color: var(--secondary-background-color);
+          }
+
+          .main-title {
+            white-space: wrap;
+            word-break: break-all;
+            /* margin-left: 16px; */
+            /* line-height: 1.3em; */
+            /* max-height: 2.6em; */
+            /* display: -webkit-box; */
+            /* overflow: hidden; */
+            /* text-overflow: ellipsis; */
+            /* -webkit-line-clamp: 2; */
+            /* -webkit-box-orient: vertical; */
+          }
+          /* .content {            margin: -20px -24px;          } */
+
+          @media all and (max-width: 450px), all and (max-height: 500px) {
+            ha-dialog-header {
+              background-color: var(--app-header-background-color);
+              color: var(--app-header-text-color, white);
+            }
+          }
+
+          @media all and (min-width: 451px) and (min-height: 501px) {
+            ha-dialog {
+              --mdc-dialog-max-width: 90vw;
+            }
+
+            .content {
+              width: 400px;
+            }
+            :host([large]) .content {
+              width: calc(90vw - 48px);
+            }
+
+            :host([large]) ha-dialog-header {
+              max-width: calc(90vw - 32px);
+            }
+          }
     `;
 }
 
-customElements.define('more-info-alert2', MoreInfoAlert2);
 customElements.define('more-info-alert2-container', MoreInfoAlert2Container);
+customElements.define('more-info-alert2', MoreInfoAlert2);
 customElements.define('alert2-overview', Alert2Overview);
 customElements.define('hui-alert2-entity-row', Alert2EntityRow);
 customElements.define('ha-alert2-state', HaAlert2State);
