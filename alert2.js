@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-console.log('alert2 v1.7');
+console.log('alert2 v1.16');
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -140,7 +140,7 @@ class Alert2Overview extends LitElement {
         let foo = html`<ha-card>
             <h1 class="card-header"><div class="name">Alerts</div></h1>
             <div class="card-content">
-              <div style="display:flex; align-items: center;">
+              <div style="display:flex; align-items: center; margin-bottom: 1em;">
                   <ha-slider .min=${0} .max=${this._sliderValArr.length-1} .step=${1} .value=${this._sliderVal} snaps ignore-bar-touch
                      @change=${this.slideCh}
                   ></ha-slider>
@@ -181,14 +181,27 @@ class Alert2Overview extends LitElement {
         return html`<div class="jEvWrapper">${element}</div>`;
     }
     _alertClick(ev, element, entityName) {
-        jFireEvent(element, "show-dialog", {
-            dialogTag: "more-info-alert2-container",
-            dialogImport: () => new Promise((resolve)=> { resolve(); }),
-            dialogParams: {
-                entityName: entityName,
-            },
-            addHistory: true
-        });
+        let stateObj = this.hass.states[entityName];
+        let friendlyName = stateObj.attributes.friendly_name2;
+        let title = '';
+        if (friendlyName) {
+            title += `"${friendlyName}" (entity ${entityName})`;
+        } else {
+            title += entityName;
+        }
+        let innerHtml = html`<more-info-alert2  dialogInitialFocus .stateObj=${stateObj} .hass=${this.hass} >
+                             </more-info-alert2>`;
+        jCreateDialog(element, title, innerHtml);
+        if (0) {
+            jFireEvent(element, "show-dialog", {
+                dialogTag: "more-info-alert2-container",
+                dialogImport: () => new Promise((resolve)=> { resolve(); }),
+                dialogParams: {
+                    entityName: entityName,
+                },
+                addHistory: true
+            });
+        }
         return true;
     }
     static styles = css`
@@ -227,6 +240,9 @@ class Alert2Overview extends LitElement {
         border-bottom-right-radius: var(--ha-card-border-radius, 12px);
         margin-top: -16px;
         overflow: hidden;
+      }
+      .jEvWrapper:not(:last-child) {
+          margin-bottom: 1em;
       }
     `;
     
@@ -324,6 +340,7 @@ class Alert2EntityRow extends LitElement  {
     constructor() {
         super();
         this._hass = null;
+        this._config = null;
         this._stateEl = null;
     }
     setConfig(config) {
@@ -359,40 +376,47 @@ class Alert2EntityRow extends LitElement  {
         const entHtml = nameToUse.split('_').map((x,idx,arr)=>(idx < arr.length-1)? html`${x}_<wbr/>` : html`${x}`);
         
         // This is essentially the guts of hui-generic-entity-row, except it does not swallow click events, like hui-generic-entity-row does (and converts it to ll-custom).  That means we can react to a click on a 'Ack' button in a row entity.
+//       <div class="awrapper">
+  //    </div>
         return html`
-         <state-badge
-        class="pointer"
-        .hass=${this._hass}
-        .stateObj=${stateObj}
-        @click=${this._rowClick}
-        tabindex="0"></state-badge>
-       <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
-       <div class="text-content value pointer" title=${stateObj.entity_id}  @click=${this._rowClick} >
-           <div class="state">
-              <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj}>
-              </ha-alert2-state>
-           </div>
-       </div>
+         <div class="outhead">
+            <state-badge class="pointer" .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
+            <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
+         </div>
+         <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj} class="text-content value pointer astate"  @click=${this._rowClick} >
+         </ha-alert2-state>
 `;
-       
-        //return html`
-//      <hui-generic-entity-row .hass=${this._hass} .config=${this._config}>
-//        <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj}>
-//        </ha-alert2-state>
-//      </hui-generic-entity-row>
-//      `;
     }
 
     static styles = css`
       :host {
         display: flex;
+        flex-flow: row wrap;
+        align-items: center;
+      }
+      .outhead, .astate {
+        max-width: max-content; /* flex: once heading has enough room, give rest to state  and vice versa */
+      }
+      .outhead {
+        display: flex;
+        align-items: center;
+        flex: 1 1 10em;
+        min-width: 7em; 
+      }
+      .astate {
+        flex: 0 0 auto;
+        margin-left: auto; /* push it to the right, when flex wraps onto second row */
+      }
+      .awrapper {
+        display: flex;
         align-items: center;
         flex-direction: row;
-      }
+     }
       .info {
         margin-left: 16px;
         margin-right: 8px;
-        flex: 1 1 30%;
+        line-height: 1.1em;
+        flex: 1 1 auto;
       }
       .info,
       .info > * {
@@ -401,17 +425,13 @@ class Alert2EntityRow extends LitElement  {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      ha-alert2-state {
-        text-align: right;
-      }
       state-badge {
-        flex: 0 0 40px;
+        flex: 0 0 40px;  /* set fixed width */
+        line-height: normal;
+        height: auto;
       }
       .pointer {
         cursor: pointer;
-      }
-      .state {
-        text-align: right;
       }
     `;
 }
@@ -564,15 +584,26 @@ class HaAlert2State extends LitElement {
         }
         const extraFiresBadge = (numSince == 0) ? '' : html`<div style="display: flex; align-items:center; margin-left:0.3em;">+${numSince}x</div>`;
         
-        return html`${ackBadge}${snoozeBadge}${ackButton}<div class="curr">${msg}</div>${extraFiresBadge}`;
+        return html`<div class="onerow">${snoozeBadge}${ackBadge}${ackButton}</div>
+                    <div class="onerow"><div class="curr">${msg}</div>${extraFiresBadge}</div>`;
     }
     static styles = css`
+      .onerow {
+          display: flex;
+          flex-flow: row;
+          align-items: center;
+      }
+      ha-progress-button {
+          display: flex;
+          height: 1em;
+          align-items: center;
+      }
       .badge {
           border-radius: 10%;
           border: 0.2em solid var(--label-badge-text-color, rgb(76, 76, 76));
           color: var(--label-badge-text-color, rgb(76, 76, 76));
           padding: 0.1em 0.3em;
-          margin-right: 1em;
+          /* margin-right: 1em; */
           font-size: 0.9em;
           opacity: 0.5;
           height: fit-content;
@@ -583,7 +614,8 @@ class HaAlert2State extends LitElement {
       :host {
         display: flex;
         flex-direction: row;
-        justify-content: center;
+        /* flex-wrap: wrap;*/
+        justify-content: right;
         white-space: nowrap;
         align-items: center;
       }
@@ -1042,6 +1074,20 @@ class MoreInfoAlert2 extends LitElement {
     }
 }
 
+// innerHtml is something returned by html``
+function jCreateDialog(element, titleStr, innerHtml) {
+    jFireEvent(element, "show-dialog", {
+        dialogTag: "more-info-alert2-container",
+        dialogImport: () => new Promise((resolve)=> { resolve(); }),
+        dialogParams: {
+            //entityName: entityName,
+            titleStr: titleStr,
+            innerHtml: innerHtml,
+        },
+        addHistory: true
+    });
+}
+
 // Similar to ha-more-info-dialog from src/dialogs/more-info/ha-more-info-dialog.ts
 class MoreInfoAlert2Container extends LitElement {
     static properties = {
@@ -1087,15 +1133,19 @@ class MoreInfoAlert2Container extends LitElement {
         if (!this.open) {
             return html``;
         }
-        let stateObj = this.hass.states[this.config.entityName];
-        let title = '';
-        let friendlyName = stateObj.attributes.friendly_name2;
-        let entityName = this.config.entityName;
-        if (friendlyName) {
-            title += `"${friendlyName}" (entity ${entityName})`;
-        } else {
-            title += entityName;
+        //let stateObj = this.hass.states[this.config.entityName];
+        let title = this.config.titleStr;
+        if (0) {
+            let friendlyName = stateObj.attributes.friendly_name2;
+            let entityName = this.config.entityName;
+            if (friendlyName) {
+                title += `"${friendlyName}" (entity ${entityName})`;
+            } else {
+                title += entityName;
+            }
         }
+        let innerHtml = this.config.innerHtml;
+        //<more-info-alert2  dialogInitialFocus .stateObj=${stateObj} .hass=${this.hass} ></more-info-alert2>
         return html`
            <ha-dialog open @closed=${this.closeDialog} .heading=${true} hideActions flexContent  >
               <ha-dialog-header slot="heading">
@@ -1104,9 +1154,7 @@ class MoreInfoAlert2Container extends LitElement {
                 <span class="main-title" slot="title" .title=${title} > ${title} </span>
               </ha-dialog-header>
               <div class="content" tabindex="-1" dialogInitialFocus>
-                   <more-info-alert2  dialogInitialFocus
-                       .stateObj=${stateObj}
-                       .hass=${this.hass} ></more-info-alert2>
+                  ${innerHtml}
              </div>
            </ha-dialog>
         `;
@@ -1176,9 +1224,7 @@ class MoreInfoAlert2Container extends LitElement {
               width: calc(90vw - 48px);
             }
 
-            :host([large]) ha-dialog-header {
-              max-width: calc(90vw - 32px);
-            }
+            /*  :host([large]) ha-dialog-header {  max-width: calc(90vw - 32px); } */
           }
     `;
 }
@@ -1190,3 +1236,10 @@ customElements.define('hui-alert2-entity-row', Alert2EntityRow);
 customElements.define('ha-alert2-state', HaAlert2State);
 customElements.define('j-relative-time', RelativeTime);
 customElements.define("state-card-alert2", StateCardAlert2);
+
+class Alert2Tools {
+    static get fireEvent() { return jFireEvent; }
+    static get createDialog() { return jCreateDialog; }
+    static get html() { return html; }
+};
+customElements.define('alert2-tools', Alert2Tools);
