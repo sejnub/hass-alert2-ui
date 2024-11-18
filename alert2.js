@@ -4,7 +4,8 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-console.log('alert2 v1.16');
+const VERSION = 'v1.5  (internal 32)';
+console.log(`alert2 ${VERSION}`);
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -17,6 +18,7 @@ class Alert2Overview extends LitElement {
         _shownEntities: {state: true},
         _cardHelpers: {state: true},
         _ackAllInProgress: {state: true},
+        _showVersion: {state: true}
     }
     constructor() {
         super();
@@ -24,6 +26,7 @@ class Alert2Overview extends LitElement {
         this._updateTimer = null;
         this._cardHelpers = null;
         this._ackAllInProgress = false;
+        this._showVersion = false;
         this._sliderValArr = [
             { str: '1 minute', secs: 60 },
             { str: '10 minutes', secs: 10*60 },
@@ -77,6 +80,7 @@ class Alert2Overview extends LitElement {
         if (changedProps.has('_shownEntities') ||
             changedProps.has('_config') ||
             changedProps.has('_cardHelpers') ||
+            changedProps.has('_showVersion') ||
             changedProps.has('_ackAllInProgress')) {
             return true;
         }
@@ -110,6 +114,9 @@ class Alert2Overview extends LitElement {
         this._ackAllInProgress = false;
         abutton.actionSuccess();
     }
+    async _toggleShowVersion(ev) {
+        this._showVersion = ! this._showVersion;
+    }
     render() {
         if (!this._cardHelpers) {
             return html`<div>Loading.. waiting for card helpers to load</div>`;
@@ -137,8 +144,15 @@ class Alert2Overview extends LitElement {
             entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf)
                                 )}`;
         }
+        let manifestVersion = 'unknown';
+        let mObj = this.hass.states['binary_sensor.alert2_ha_startup_done'];
+        if (Object.hasOwn(mObj.attributes, 'manifest_version')) {
+            manifestVersion = mObj.attributes.manifest_version;
+        }
+        let versionHtml = this._showVersion ? html`<table class="tversions" cellspacing=0>
+             <tr><td>Alert2 UI<td>${VERSION}</tr><tr><td>Alert2<td>v${manifestVersion}</tr></table>` : html``;
         let foo = html`<ha-card>
-            <h1 class="card-header"><div class="name">Alerts</div></h1>
+            <h1 class="card-header"><div class="name" @click=${this._toggleShowVersion}>Alerts</div>${versionHtml}</h1>
             <div class="card-content">
               <div style="display:flex; align-items: center; margin-bottom: 1em;">
                   <ha-slider .min=${0} .max=${this._sliderValArr.length-1} .step=${1} .value=${this._sliderVal} snaps ignore-bar-touch
@@ -189,9 +203,13 @@ class Alert2Overview extends LitElement {
         } else {
             title += entityName;
         }
-        let innerHtml = html`<more-info-alert2  dialogInitialFocus .stateObj=${stateObj} .hass=${this.hass} >
-                             </more-info-alert2>`;
-        jCreateDialog(element, title, innerHtml);
+        //let innerHtml = html`<more-info-alert2  dialogInitialFocus .entityId=${entityName} .hass=${this.hass} >
+        //                     </more-info-alert2>`;
+        let innerElem = document.createElement('more-info-alert2');
+        innerElem.entityId = entityName;
+        innerElem.setAttribute('dialogInitialFocus', '');
+        innerElem.hass = this.hass;
+        jCreateDialog(element, title, innerElem);
         if (0) {
             jFireEvent(element, "show-dialog", {
                 dialogTag: "more-info-alert2-container",
@@ -219,6 +237,7 @@ class Alert2Overview extends LitElement {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        cursor: pointer;
       }
       div#jempt {
         margin: 0px 18px 18px 18px;
@@ -243,6 +262,18 @@ class Alert2Overview extends LitElement {
       }
       .jEvWrapper:not(:last-child) {
           margin-bottom: 1em;
+      }
+      .tversions {
+        font-size: 1rem;
+        user-select: text;
+        line-height: 1.2em;
+        height: 0;  /* necessary, no idea why.  could also be max-content */
+      }
+      .tversions td {
+          padding: 0px;
+      }
+      .tversions td:first-child {
+          padding-right: 0.7em;
       }
     `;
     
@@ -505,7 +536,14 @@ class HaAlert2State extends LitElement {
         jFireEvent(this, "hass-notification", { message: amsg });
     }
     async _jack(ev) {
-        console.log('_jack clicked');
+        await this.ackInternal(ev, true);
+    }
+    async _junack(ev) {
+        await this.ackInternal(ev, false);
+    }
+    async ackInternal(ev, isAck) {
+        let op = isAck ? 'ack' : 'unack';
+        console.log(`${op} clicked`);
         this._ackInProgress = true;
         let abutton = ev.target;
         ev.stopPropagation();
@@ -514,7 +552,7 @@ class HaAlert2State extends LitElement {
                 await this._hass.callWS({
                     type: "execute_script",
                     sequence: [ {
-                        service: 'alert2.ack',
+                        service: isAck ? 'alert2.ack' : 'alert2.unack',
                         data: {},
                         target: { entity_id: this._stateObj.entity_id }
                     }],
@@ -558,10 +596,12 @@ class HaAlert2State extends LitElement {
             last_fired_time = Date.parse(ent.state);
             msg = html`<j-relative-time .timestamp=${last_fired_time} .useLongnames=${false}></j-relative-time>`;
         }
-        let ackBadge = '';
         let ackButton = ''
         if (last_ack_time && last_ack_time > last_fired_time) {
-            ackBadge = html`<div class="badge noborder">Acked</div>`;
+            ackButton = html`<ha-progress-button
+                  .progress=${this._ackInProgress} class="unack"
+                  @click=${this._junack}>Unack</ha-progress-button>
+                 `;
         } else {
             ackButton = html`<ha-progress-button
                   .progress=${this._ackInProgress}
@@ -584,10 +624,13 @@ class HaAlert2State extends LitElement {
         }
         const extraFiresBadge = (numSince == 0) ? '' : html`<div style="display: flex; align-items:center; margin-left:0.3em;">+${numSince}x</div>`;
         
-        return html`<div class="onerow">${snoozeBadge}${ackBadge}${ackButton}</div>
+        return html`<div class="onerow">${snoozeBadge}${ackButton}</div>
                     <div class="onerow"><div class="curr">${msg}</div>${extraFiresBadge}</div>`;
     }
     static styles = css`
+      .unack {
+          opacity: 0.6;
+      }
       .onerow {
           display: flex;
           flex-flow: row;
@@ -706,16 +749,31 @@ function jFireEvent(elem, evName, params) {
 // Similar to ha-more-info-info from src/dialogs/more-info/ha-more-info-info.ts
 class MoreInfoAlert2 extends LitElement {
     static properties = {
-        hass: { attribute: false,
-                hasChanged(newVal, oldVal) { return false; }
-        },
-        stateObj: { },
+        hass: { attribute: false },
+        //stateObj: { },
+        entityId: { attribute: false },
         _requestInProgress: {state: true},
         _ackInProgress: {state: true},
         _currValue: {state: true},
         _historyArr: {state: true},
     }
-
+    // I don't think anything sets hass on MoreInfoAlert2 and so this code will never run after init
+    shouldUpdate(changedProps) {
+        //console.log('MoreInfoAlert2  shouldUpdate: ', changedProps);
+        if (changedProps.has('hass')) {
+            const oldHass = changedProps.get("hass");
+            if (!oldHass) { return true; }
+            const newHass = this.hass;
+            const oldState = oldHass.states[this.entityId];
+            const newState = newHass.states[this.entityId];
+            let changed = oldState !== newState;
+            if (changed) {
+                //console.log('    MoreInfoAlert2 state changed: ', oldState, newState);
+            }
+            return changed;
+        }
+        return true;
+    }
     constructor() {
         super();
         this._requestInProgress = false;
@@ -723,6 +781,7 @@ class MoreInfoAlert2 extends LitElement {
         this._currValue = NOTIFICATIONS_ENABLED;
         this.textEl = null;
         this._historyArr = null;
+        this._historyStartDate = null;
         this._historyEndDate = null;
         this._fetchPrevInProgress = false;
         this._fetchCurrInProgress = false;
@@ -736,14 +795,15 @@ class MoreInfoAlert2 extends LitElement {
         super.firstUpdated();
         // see https://lit.dev/docs/v1/components/lifecycle/#firstupdated
         // could use connectedCallback to do this earlier
-        this._currValue = this.stateObj.attributes.notification_control;
+        let stateObj = this.hass.states[this.entityId];
+        this._currValue = stateObj.attributes.notification_control;
         let s1 = this.shadowRoot.querySelector('ha-formfield#for-snooze ha-textfield');
         this.textEl = s1;
         this.textEl.validityTransform = (newValue, nativeValidity) => {
             let isvalid = strIsValidNumber(newValue) != null;
             return { valid: isvalid };
         }
-        this.getHistory();
+        this.fetchCurr();
         customElements.whenDefined('state-card-alert2').then(()=>{
             this.requestUpdate();
         });
@@ -753,29 +813,32 @@ class MoreInfoAlert2 extends LitElement {
     }
     fetchPrev() {
         const msAgo = 24*60*60*1000.0;
-        if (this._historyEndDate) {
-            this._historyEndDate = new Date(this._historyEndDate.getTime() - msAgo);
-        } else {
-            this._historyEndDate = new Date((new Date()).getTime() - msAgo);
+        if (!this._historyStartDate) {
+            this.fetchCurr();
+            return;
         }
+        this._historyEndDate = this._historyStartDate;
+        this._historyStartDate = new Date(this._historyStartDate.getTime() - msAgo);
         this._fetchPrevInProgress = true;
         this.getHistory();
     }
     fetchCurr() {
+        const msAgo = 24*60*60*1000.0;
+        this._historyStartDate = new Date((new Date()).getTime() - msAgo);
         this._historyEndDate = null;
         this._fetchCurrInProgress = true;
         this.getHistory();
     }
     getHistory() {
-        const msAgo = 24*60*60*1000.0;
-        const startDate = new Date((this._historyEndDate ? this._historyEndDate : (new Date())).getTime() - msAgo);
-        console.log('will getHistory from', startDate);
-        let historyUrl = `history/period/${startDate.toISOString()}?filter_entity_id=${this.stateObj.entity_id}`;
+        console.log('will getHistory from', this._historyStartDate);
+        let stateObj = this.hass.states[this.entityId];
+        let historyUrl = `history/period/${this._historyStartDate.toISOString()}?filter_entity_id=${stateObj.entity_id}`;
         if (this._historyEndDate) {
             historyUrl += `&end_time=${this._historyEndDate.toISOString()}`;
         }
         const outerThis = this;
-        const isAlert = 'last_on_time' in this.stateObj.attributes;
+        const isAlert = 'last_on_time' in stateObj.attributes;
+        const maxCount = 20;
         this.hass.callApi('GET', historyUrl).then(function(rez) {
             console.log('got history state', rez);
             outerThis._fetchCurrInProgress = false;
@@ -799,16 +862,27 @@ class MoreInfoAlert2 extends LitElement {
                         newArr.push(rezArr[idx]);
                     }
                 }
+                if (newArr.length >= maxCount) {
+                    let oldestEl = newArr[maxCount-1];
+                    let oldestDate = Date.parse(oldestEl.last_updated);
+                    if (oldestDate == NaN) {
+                        console.error('Alert2: Unable to parse last_updated', oldestEl.last_updated);
+                    } else {
+                        newArr = newArr.slice(0, maxCount);
+                        outerThis._historyStartDate = new Date(oldestDate);
+                    }
+                }
                 outerThis._historyArr = newArr;
             }
         }).catch((err)=> { console.error('hass call to get alert history failed: ', err); });
     }
     
     render() {
-        if (!this.hass || !this.stateObj) {
+        if (!this.hass) {
             return "";
         }
-        let stateValue = this.stateObj.attributes.notification_control;
+        let stateObj = this.hass.states[this.entityId];
+        let stateValue = stateObj.attributes.notification_control;
         let notification_status;
         if (stateValue == null) {
             notification_status = "unknown";
@@ -826,12 +900,12 @@ class MoreInfoAlert2 extends LitElement {
         } else {
             is_snoozed = true;
         }
-        const entName = this.stateObj.entity_id;
-        const isAlert = 'last_on_time' in this.stateObj.attributes;
+        const entName = stateObj.entity_id;
+        const isAlert = 'last_on_time' in stateObj.attributes;
         let isAlertOn = false;
         let onBadge = ''
         if (isAlert) {
-            isAlertOn = this.stateObj.state == 'on';
+            isAlertOn = stateObj.state == 'on';
             onBadge = isAlertOn ? "on" : "off";
         }
         let historyHtml = html`Fetching history...`;
@@ -869,11 +943,15 @@ class MoreInfoAlert2 extends LitElement {
                     ${this._historyArr.map((elem) => rHist(elem) )}</table>`;
             }
         }
+        // This is written so that it will stay live and update notification control status,
+        // but will not change the notification control settings themselves,
+        // so you don't get overrulled why trying to change settings.  This is done by
+        // having this._currValue only change due to user input, not changes to hass.
         return html`
          <div class="container" >
             <state-card-content
               in-dialog
-              .stateObj=${this.stateObj}
+              .stateObj=${stateObj}
               .hass=${this.hass}
             ></state-card-content>
             <div id="previousFirings" style="margin-top: 1em;">
@@ -883,7 +961,7 @@ class MoreInfoAlert2 extends LitElement {
                   <ha-progress-button
                     .progress=${this._fetchPrevInProgress}
                     @click=${this.fetchPrev}
-                  >Prev Day</ha-progress-button>
+                  >Prev</ha-progress-button>
                   <ha-progress-button
                     .progress=${this._fetchCurrInProgress}
                     @click=${this.fetchCurr}
@@ -909,6 +987,7 @@ class MoreInfoAlert2 extends LitElement {
                   @change=${this._valueChanged}
                   ></ha-radio></ha-formfield></div>
             <div style="margin-bottom:1em;"><ha-formfield id="for-snooze">
+                  <!-- if change structure of HTML here, update _aclick() -->
                   <ha-radio
                       id="rad1"
                       .checked=${is_snoozed}
@@ -938,7 +1017,7 @@ class MoreInfoAlert2 extends LitElement {
             <br/><br/>
             <ha-attributes
                 .hass=${this.hass}
-                .stateObj=${this.stateObj}
+                .stateObj=${stateObj}
                 ></ha-attributes>
          </div>`;
     }
@@ -1017,13 +1096,14 @@ class MoreInfoAlert2 extends LitElement {
             var newDate = new Date((new Date()).getTime() + hours*60*60*1000);
             data.snooze_until = newDate;
         }
+        let stateObj = this.hass.states[this.entityId];
         try {
             await this.hass.callWS({
                 type: "execute_script",
                 sequence: [ {
                     service: 'alert2.notification_control',
                     data: data,
-                    target: { entity_id: this.stateObj.entity_id }
+                    target: { entity_id: stateObj.entity_id }
                 }],
             });
         } catch (err) {
@@ -1034,18 +1114,20 @@ class MoreInfoAlert2 extends LitElement {
         }
         this._requestInProgress = false;
         abutton.actionSuccess();
+        this.requestUpdate();
     }
     async _jack(ev) {
         this._ackInProgress = true;
         let abutton = ev.target;
         ev.stopPropagation();
+        let stateObj = this.hass.states[this.entityId];
         try {
             await this.hass.callWS({
                 type: "execute_script",
                 sequence: [ {
                     service: 'alert2.ack',
                     data: {},
-                    target: { entity_id: this.stateObj.entity_id }
+                    target: { entity_id: stateObj.entity_id }
                 }],
             });
         } catch (err) {
@@ -1058,31 +1140,34 @@ class MoreInfoAlert2 extends LitElement {
         abutton.actionSuccess();
     }
     _aclick(ev) {
-        let radioEl = ev.target.previousSibling;
-        if (ev.target.id == "slabel") {
-            // good
-        } else if (ev.target.nodeName == "HA-TEXTFIELD") {
-            radioEl = ev.target.parentElement.previousSibling;
+        let formEl = ev.target.parentElement;
+        let count = 2;
+        while (formEl.nodeName !== "HA-FORMFIELD" && (count-- > 0)) {
+            formEl = formEl.parentElement;
         }
-        if (radioEl.nodeName != "HA-RADIO") {
-            console.error("radio name is not HA-RADIO, is ", radioEl.nodeName);
+        if (formEl.nodeName !== "HA-FORMFIELD") {
+            console.error("Could not find ha-formfield", formEl);
+        }
+        let radioEl = formEl.querySelector('ha-radio');
+        let textEl = formEl.querySelector('ha-textfield');
+        if (!radioEl || !textEl) {
+            console.error('could not find sub radio/textfield', radioEl, textEl);
         }
         radioEl.checked = true;
-        let textEl = radioEl.parentElement.querySelector('ha-textfield');
-        console.log('aclick called, textEl is ', textEl.value);
         this._currValue = textEl.value;
     }
 }
 
 // innerHtml is something returned by html``
-function jCreateDialog(element, titleStr, innerHtml) {
+function jCreateDialog(element, titleStr, innerElem) {
     jFireEvent(element, "show-dialog", {
         dialogTag: "more-info-alert2-container",
         dialogImport: () => new Promise((resolve)=> { resolve(); }),
         dialogParams: {
             //entityName: entityName,
             titleStr: titleStr,
-            innerHtml: innerHtml,
+            innerElem: innerElem,
+            //innerHtml: innerHtml,
         },
         addHistory: true
     });
@@ -1093,12 +1178,23 @@ class MoreInfoAlert2Container extends LitElement {
     static properties = {
         open: {},
         large: {reflect: true, type: Boolean},
-        hass: { attribute: false },
+        _hass: { state: true },
+        //hass: { attribute: false },
     }
     constructor() {
         super();
         this.config = null;
         this.large = true;
+        this._hass = null;
+    }
+    set hass(nhass) {
+        this._hass = nhass;
+        if (this.config) {
+            this.config.innerElem.hass = nhass;
+        }
+    }
+    setConfig(config) {
+        this.config = config;
     }
     showDialog(dialogParams) {
         //console.log('MoreInfoAlert2Container showDialog called', dialogParams);
@@ -1108,9 +1204,6 @@ class MoreInfoAlert2Container extends LitElement {
     closeDialog() {
         this.open = false;
         jFireEvent(this, "dialog-closed", { dialog: this.localName });
-    }
-    setConfig(config) {
-        this.config = config;
     }
     connectedCallback() {
         super.connectedCallback();
@@ -1123,8 +1216,12 @@ class MoreInfoAlert2Container extends LitElement {
             adiv.style.maxWidth = null;
         }
     }
+    //shouldUpdate(changedProps) {
+    //    console.log(' MoreInfoAlert2Container shouldUpdate called ', changedProps);
+    //    return true;
+    //}
     render() {
-        if (!this.hass) {
+        if (!this._hass) {
             return html`<div>waiting for hass</div>`;
         }
         if (!this.config) {
@@ -1144,7 +1241,8 @@ class MoreInfoAlert2Container extends LitElement {
                 title += entityName;
             }
         }
-        let innerHtml = this.config.innerHtml;
+        //let innerHtml = this.config.innerHtml;
+        let innerElem = this.config.innerElem;
         //<more-info-alert2  dialogInitialFocus .stateObj=${stateObj} .hass=${this.hass} ></more-info-alert2>
         return html`
            <ha-dialog open @closed=${this.closeDialog} .heading=${true} hideActions flexContent  >
@@ -1154,7 +1252,7 @@ class MoreInfoAlert2Container extends LitElement {
                 <span class="main-title" slot="title" .title=${title} > ${title} </span>
               </ha-dialog-header>
               <div class="content" tabindex="-1" dialogInitialFocus>
-                  ${innerHtml}
+                  ${innerElem}
              </div>
            </ha-dialog>
         `;
