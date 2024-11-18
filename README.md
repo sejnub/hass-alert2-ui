@@ -1,5 +1,10 @@
 <!-- ~/tmp/general-env/bin/grip -b ~/tmp/hass-alert2-ui/README.md 6420 -->
 
+[![GitHub Release](https://img.shields.io/github/v/release/redstone99/hass-alert2-ui)](https://github.com/redstone99/hass-alert2-ui/releases)
+[![GitHub Release Date](https://img.shields.io/github/release-date/redstone99/hass-alert2-ui)](https://github.com/redstone99/hass-alert2-ui/releases)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/y/redstone99/hass-alert2-ui)](https://github.com/redstone99/hass-alert2-ui/commits/master/)
+<!-- ![GitHub commits since latest release](https://img.shields.io/github/commits-since/redstone99/hass-alert2-ui/latest) -->
+
 # Alert2 UI
 
 This repository contains a Lovelace card to display and interact with [Alert2](https://github.com/redstone99/hass-alert2) alerts.  It also enhances the information shown in the "more-info" dialog when viewing Alert2 entities in entity cards. We recommend first installing [Alert2](https://github.com/redstone99/hass-alert2).
@@ -98,6 +103,8 @@ Note - `alert2-overview` will show currently firing old Alert-1 alerts, but it w
 
 ![Alert2 overview card](resources/overview.png)
 
+Clicking on the "Alerts" header will show the 
+
 ### Detailed alert info
 
 If you click on a specific alert listed in the alert overview, a dialog pops up with detailed info on the alert and notification controls. Example:
@@ -106,9 +113,11 @@ If you click on a specific alert listed in the alert overview, a dialog pops up 
 
 The first line is a repeat of the alert status.
 
-The second "Previous Firings" section lists each firing over the previous 24 hours.  The time when the alert turned on or off is listed as well as the message template text rendered when the alert fired.  The "PREV DAY" button lets you look at firings one day earlier and "RESET" returns the listing to the firings over the past 24 hours.  You may see events listed that have time `unknown`. This are extra events inserted due to either HomeAssistant restarting or the first time an alert is created (TODO - filter these spurious events out).
+The second "Previous Firings" section lists each firing over the previous 24 hours, limited to the most recent 20 events.  The time when the alert turned on or off is listed as well as the message template text rendered when the alert fired.  The "PREV" button lets you go back further in time and "RESET" returns the listing to the firings over the past 24 hours and refreshes the listing.  You may see events listed that have time `unknown`. This are extra events inserted due to either HomeAssistant restarting or the first time an alert is created (TODO - filter these spurious events out).
 
-The "Notifications" section lets you snooze or disable notifications. Select an option and click "Update".
+The "Notifications" section lets you snooze or disable notifications. Select an option and click "Update".  The "Status" line will update dynamically.
+
+Snoozing an alert implicitly ack's it and prevent notifications during the snooze interval.  When the interval ends you can opt to get a summary notification of any alert activity during the period. See `summary_notifier` in the [Alert2](https://github.com/redstone99/hass-alert2) docs.
 
 ### Other ways to view alerts
 
@@ -120,6 +129,11 @@ Finally, you can also view alert information by going to Settings -> Devices & S
 
 After upgrading Alert2 UI, it can take time for the browser or HA companion app to update alert2.js.  To speed that up:
 
-* On the web, try reloading the page a few times or "Clear cookies & site data".
+* On the web, try reloading the page a few times and also "Clear cookies & site data".
 
-* On the Android HA companion app, try going to System Settings -> Apps -> Home Assitant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.
+* On the Android HA companion app, try going to System Settings -> Apps -> Home Assistant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.
+
+If you want to verify the Alert2 UI version you're running, you can click on the "Alerts" header of the Lovelace card to show the version:
+
+![Alert2 overview card with version info](resources/overview2.png)
+
