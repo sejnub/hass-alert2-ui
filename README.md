@@ -13,7 +13,8 @@ This repository contains a Lovelace card to display and interact with [Alert2](h
 
 ## Install
 
-### HACS install (recommended)
+<details>
+<summary>HACS install (recommended)</summary>
 
 1. If HACS is not installed, follow HACS installation and configuration instructions at https://hacs.xyz/.
 
@@ -29,8 +30,10 @@ This repository contains a Lovelace card to display and interact with [Alert2](h
 
 
 1. Click "Reload" when it prompts you to reload your browser.
+</details>
 
-### Manual install
+<details>
+<summary>Manual install</summary>
 
 1. Download the `Source code (zip)` link from the repository [release section](https://github.com/redstone99/hass-alert2-ui/releases) under "Assets" and unzip it.
 
@@ -49,6 +52,24 @@ This repository contains a Lovelace card to display and interact with [Alert2](h
         <config dir>/custom_components/alert2/__init__.py
         <config dir>/custom_components/alert2/sensor.py
          ... etc...
+
+</details>
+
+<details>
+<summary>Upgrading</summary>
+
+After upgrading Alert2 UI, it can take time for the browser or HA companion app to update alert2.js.  To speed that up:
+
+* On the web, try reloading the page a few times and also "Clear cookies & site data".
+
+* On the Android HA companion app, try going to System Settings -> Apps -> Home Assistant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.
+
+</details
+
+After installing or upgrading, you can verify the Alert2 UI version you're running by clicking on the "Alerts" header of the Lovelace card:
+
+![Alert2 overview card with version info](resources/overview2.png)
+
 
 ## Setup
 
@@ -103,8 +124,6 @@ Note - `alert2-overview` will show currently firing old Alert-1 alerts, but it w
 
 ![Alert2 overview card](resources/overview.png)
 
-Clicking on the "Alerts" header will show the 
-
 ### Detailed alert info
 
 If you click on a specific alert listed in the alert overview, a dialog pops up with detailed info on the alert and notification controls. Example:
@@ -124,16 +143,4 @@ Snoozing an alert implicitly ack's it and prevent notifications during the snooz
 You may also add alert2 entities to entities cards and other cards that support entities.  If you click on an alert shown in such a situation, you'll see a popup (called a "more-info dialog") similar to the one shown above.  However, since Alert2 isn't integrated into the core HomeAssistant, that dialog will include some extra default sections like "history", but will also include the sections described above.
 
 Finally, you can also view alert information by going to Settings -> Devices & Services -> Entities, typing "alert2." in the search box and browsing the list.  Clicking on one will popup the "more-info dialog".
-
-## Upgrading
-
-After upgrading Alert2 UI, it can take time for the browser or HA companion app to update alert2.js.  To speed that up:
-
-* On the web, try reloading the page a few times and also "Clear cookies & site data".
-
-* On the Android HA companion app, try going to System Settings -> Apps -> Home Assistant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.
-
-If you want to verify the Alert2 UI version you're running, you can click on the "Alerts" header of the Lovelace card to show the version:
-
-![Alert2 overview card with version info](resources/overview2.png)
 
