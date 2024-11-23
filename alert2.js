@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5  (internal 32)';
+const VERSION = 'v1.5.1  (internal 34)';
 console.log(`alert2 ${VERSION}`);
 
 // A custom card that lists alerts that have fired recently
@@ -12,8 +12,6 @@ class Alert2Overview extends LitElement {
     // https://lit.dev/docs/components/properties/
     // has good description of reactive properties
     static properties = {
-        // TODO - Given we use timeout to refresh entity list, maybe hass doesn't need to be reactive property
-       hass: {attribute: false},
         _config: {state: true},
         _shownEntities: {state: true},
         _cardHelpers: {state: true},
@@ -38,8 +36,24 @@ class Alert2Overview extends LitElement {
         ]
         this._sliderVal = 3;// 4 hours
         window.loadCardHelpers().then(hs => { this._cardHelpers = hs; });
+        this._hass = null;
     }
-    
+    set hass(newHass) {
+        const oldHass = this._hass;
+        this._hass = newHass;
+        // sensor.alert2_change_count is a performance optimization so we can limit how
+        // often we have to scan for new entities to include in the recent alert list.
+        // It changes each time any alert fires.
+        const entityId = 'sensor.alert2_change_count';
+        if (newHass && (!oldHass || (oldHass.states[entityId] !== newHass.states[entityId]))) {
+            this.jrefresh();
+        }
+        if (this.shadowRoot && this._hass) {
+            this.shadowRoot.querySelectorAll("hui-alert2-entity-row").forEach((elem) => {
+                elem.hass = this._hass;
+            });
+        }
+    }
     connectedCallback() {
         super.connectedCallback();
         this._updateTimer = setInterval(this.jrefresh, 60*1000, this);
@@ -48,34 +62,11 @@ class Alert2Overview extends LitElement {
         clearInterval(this._updateTimer);
         super.disconnectedCallback();
     }
-    jrefresh(tthis) {
-        tthis.jrefreshInt(false).then( result => true );
-    }
     setConfig(config) {
         this._config = config;
     }
     shouldUpdate(changedProps) {
         if (changedProps.has('hass')) {
-            const oldHass = changedProps.get("hass");
-            const newHass = this.hass;
-            if (!oldHass) {
-                if (newHass) {
-                    this.jrefresh(this);
-                } else {
-                    console.warn('no old or new hass');
-                }
-            } else {
-                // sensor.alert2_change_count is a performance optimization.
-                // It increases when any alert changes. The purpose is to limit how often
-                // we scan all entities to find which alerts to display. Without it,
-                // we'd have to rescan all entities periodically.
-                const entityId = 'sensor.alert2_change_count';
-                const oldState = oldHass.states[entityId];
-                const newState = newHass.states[entityId];
-                if (oldState !== newState) {
-                    this.jrefreshInt(true).then( result => true );
-                }
-            }
         }
         if (changedProps.has('_shownEntities') ||
             changedProps.has('_config') ||
@@ -90,7 +81,7 @@ class Alert2Overview extends LitElement {
     slideCh(ev) {
         let val = this.shadowRoot.querySelector("ha-slider").value;
         this._sliderVal = val;
-        this.jrefreshInt(true).then( result => true );
+        this.jrefresh();
     }
     // Ack all button was pressed
     async _ackAll(ev) {
@@ -98,7 +89,7 @@ class Alert2Overview extends LitElement {
         let abutton = ev.target;
         let outerThis = this;
         try {
-            await this.hass.callWS({
+            await this._hass.callWS({
                 type: "execute_script",
                 sequence: [ {
                     service: 'alert2.ack_all',
@@ -118,8 +109,8 @@ class Alert2Overview extends LitElement {
         this._showVersion = ! this._showVersion;
     }
     render() {
-        if (!this._cardHelpers) {
-            return html`<div>Loading.. waiting for card helpers to load</div>`;
+        if (!this._cardHelpers || !this._hass) {
+            return html`<div>Loading.. waiting for hass + card helpers to load</div>`;
         }
 
         const outerThis = this;
@@ -145,7 +136,7 @@ class Alert2Overview extends LitElement {
                                 )}`;
         }
         let manifestVersion = 'unknown';
-        let mObj = this.hass.states['binary_sensor.alert2_ha_startup_done'];
+        let mObj = this._hass.states['binary_sensor.alert2_ha_startup_done'];
         if (Object.hasOwn(mObj.attributes, 'manifest_version')) {
             manifestVersion = mObj.attributes.manifest_version;
         }
@@ -173,9 +164,7 @@ class Alert2Overview extends LitElement {
     renderEntity(entityConf) {
         let entityName = entityConf.entity;
         const element = this._cardHelpers.createRowElement(entityConf);
-        if (this.hass) {
-            element.hass = this.hass;
-        }
+        element.hass = this._hass;
         let outerThis = this;
         // hui-generic-entity-row calls handleAction on events, including clicks.
         // we set the action to take on 'tap' to be 'fire-dom-event', which generates a 'll-custom' event
@@ -195,7 +184,7 @@ class Alert2Overview extends LitElement {
         return html`<div class="jEvWrapper">${element}</div>`;
     }
     _alertClick(ev, element, entityName) {
-        let stateObj = this.hass.states[entityName];
+        let stateObj = this._hass.states[entityName];
         let friendlyName = stateObj.attributes.friendly_name2;
         let title = '';
         if (friendlyName) {
@@ -208,7 +197,7 @@ class Alert2Overview extends LitElement {
         let innerElem = document.createElement('more-info-alert2');
         innerElem.entityId = entityName;
         innerElem.setAttribute('dialogInitialFocus', '');
-        innerElem.hass = this.hass;
+        innerElem.hass = this._hass;
         jCreateDialog(element, title, innerElem);
         if (0) {
             jFireEvent(element, "show-dialog", {
@@ -277,17 +266,17 @@ class Alert2Overview extends LitElement {
       }
     `;
     
-    async jrefreshInt(forceUpdate) {
-        if (!this.hass) {
+    jrefresh() {
+        if (!this._hass) {
             console.log('skipping jrefresh cuz no hass');
             return;
         }
         const intervalSecs = this._sliderValArr[this._sliderVal].secs;
         let entities = new Map();
         let nowSecs = Date.now() / 1000.0;
-        for (let entityName in this.hass.states) {
+        for (let entityName in this._hass.states) {
             if (entityName.startsWith('alert.')) {
-                let ent = this.hass.states[entityName];
+                let ent = this._hass.states[entityName];
                 if (ent.state == 'idle') {
                     let lastOffSecs = Date.parse(ent.last_changed) / 1000.0;
                     let agoSecs = nowSecs - lastOffSecs;
@@ -299,7 +288,7 @@ class Alert2Overview extends LitElement {
                     entities.set(entityName, nowSecs);
                 }
             } else if (entityName.startsWith('alert2.')) {
-                let ent = this.hass.states[entityName];
+                let ent = this._hass.states[entityName];
                 let lastFireSecs = 0; // 1970
                 if (ent.state) {
                     if ('last_on_time' in ent.attributes) {
@@ -334,21 +323,16 @@ class Alert2Overview extends LitElement {
                 }
             }
         }
-        if (entities.size == this._shownEntities.size) {
+        
+        if (entities.size !== this._shownEntities.size) {
+            this._shownEntities = entities;
+        } else {
             for (const entName of entities.keys()) {
                 if (!this._shownEntities.has(entName)) {
                     this._shownEntities = entities;
                     return;
                 }
             }
-        } else {
-            this._shownEntities = entities;
-            return;
-        }
-        // Fall through: entities set hasn't changed so don't trigger an update
-        if (forceUpdate) {
-            this._shownEntities = entities;
-            return;
         }
     }
 }
