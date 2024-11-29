@@ -56,7 +56,9 @@ class Alert2Overview extends LitElement {
     }
     connectedCallback() {
         super.connectedCallback();
-        this._updateTimer = setInterval(this.jrefresh, 60*1000, this);
+        let outerThis = this;
+        let func = function() { outerThis.jrefresh(); }
+        this._updateTimer = setInterval(func, 10*1000);
     }
     disconnectedCallback() {
         clearInterval(this._updateTimer);
@@ -212,12 +214,6 @@ class Alert2Overview extends LitElement {
         return true;
     }
     static styles = css`
-      ha-card {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
       .card-header {
         display: flex;
         justify-content: space-between;

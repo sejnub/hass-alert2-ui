@@ -1,0 +1,544 @@
+         import {LitElement, html, css} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+         import { FormfieldBase } from "@material/mwc-formfield/mwc-formfield-base";
+         import { MdSlider } from "@material/web/slider/slider";
+         import { styles as formStyles } from "@material/mwc-formfield/mwc-formfield.css";
+         import "@material/mwc-button";
+         import { RadioBase } from "@material/mwc-radio/mwc-radio-base";
+         import { styles as radioStyles } from "@material/mwc-radio/mwc-radio.css";
+         import { TextFieldBase } from "@material/mwc-textfield/mwc-textfield-base";
+         import { styles as textfieldStyles } from "@material/mwc-textfield/mwc-textfield.css";
+         class HaSlider extends MdSlider {
+             static styles = [
+                 ...super.styles,
+                 css`
+            :host {
+              --md-sys-color-primary: var(--primary-color);
+              --md-sys-color-on-primary: var(--text-primary-color);
+              --md-sys-color-outline: var(--outline-color);
+              --md-sys-color-on-surface: var(--primary-text-color);
+              --md-slider-handle-width: 14px;
+              --md-slider-handle-height: 14px;
+              --md-slider-state-layer-size: 24px;
+              min-width: 100px;
+              min-inline-size: 100px;
+              width: 200px;
+            }
+                 `,
+             ];
+         }
+         class HaCard extends LitElement {
+             static properties = {
+                 header: {},
+                 raised: { type: Boolean, reflect: true }
+             }
+
+             static styles = css`
+                :host {
+                  background: var(
+                    --ha-card-background,
+                    var(--card-background-color, white)
+                  );
+                  -webkit-backdrop-filter: var(--ha-card-backdrop-filter, none);
+                  backdrop-filter: var(--ha-card-backdrop-filter, none);
+                  box-shadow: var(--ha-card-box-shadow, none);
+                  box-sizing: border-box;
+                  border-radius: var(--ha-card-border-radius, 12px);
+                  border-width: var(--ha-card-border-width, 1px);
+                  border-style: solid;
+                  border-color: var(
+                    --ha-card-border-color,
+                    var(--divider-color, #e0e0e0)
+                  );
+                  color: var(--primary-text-color);
+                  display: block;
+                  transition: all 0.3s ease-out;
+                  position: relative;
+                }
+
+                :host([raised]) {
+                  border: none;
+                  box-shadow: var(
+                    --ha-card-box-shadow,
+                    0px 2px 1px -1px rgba(0, 0, 0, 0.2),
+                    0px 1px 1px 0px rgba(0, 0, 0, 0.14),
+                    0px 1px 3px 0px rgba(0, 0, 0, 0.12)
+                  );
+                }
+
+                .card-header,
+                :host ::slotted(.card-header) {
+                  color: var(--ha-card-header-color, --primary-text-color);
+                  font-family: var(--ha-card-header-font-family, inherit);
+                  font-size: var(--ha-card-header-font-size, 24px);
+                  letter-spacing: -0.012em;
+                  line-height: 48px;
+                  padding: 12px 16px 16px;
+                  display: block;
+                  margin-block-start: 0px;
+                  margin-block-end: 0px;
+                  font-weight: normal;
+                }
+
+                :host ::slotted(.card-content:not(:first-child)),
+                slot:not(:first-child)::slotted(.card-content) {
+                  padding-top: 0px;
+                  margin-top: -8px;
+                }
+
+                :host ::slotted(.card-content) {
+                  padding: 16px;
+                }
+
+                :host ::slotted(.card-actions) {
+                  border-top: 1px solid var(--divider-color, #e8e8e8);
+                  padding: 5px 16px;
+                }
+                           `
+
+             render() {
+                 return html`
+            ${this.header
+              ? html`<h1 class="card-header">${this.header}</h1>`
+              : ""}
+            <slot></slot>
+               `;
+             }
+         }
+         class HaProgressButton extends LitElement {
+             static properties = {
+                 disabled: { type: Boolean },
+                 progress: { type: Boolean },
+                 raised: { type: Boolean },
+                 _result: { state: true }
+             }
+             constructor() {
+                 super();
+                 this.disabled = false;
+                 this.progress = false;
+                 this.raised = false;
+                 this._result = null;
+             }
+             render() {
+                 const overlay = this._result || this.progress;
+                 return html`
+                     <mwc-button
+                         ?raised=${this.raised}
+                         .disabled=${this.disabled || this.progress}
+                         @click=${this._buttonTapped}
+                         class=${this._result || ""}
+                         >
+        <slot></slot>
+                     </mwc-button>
+                     ${!overlay
+                     ? ""
+                     : html`
+                 <div class="progress">
+                 ${this._result === "success"
+                 ? html`<ha-svg-icon .path=${mdiCheckBold}></ha-svg-icon>`
+                 : this._result === "error"
+                 ? html`<ha-svg-icon .path=${mdiAlertOctagram}></ha-svg-icon>`
+                 : this.progress
+                 ? html`
+                     <ha-circular-progress
+                        size="small"
+                         indeterminate
+                         ></ha-circular-progress>
+                 `
+                 : ""}
+                 </div>
+                 `}
+                 `;
+             }
+
+             actionSuccess() {
+                 this._setResult("success");
+             }
+             actionError() {
+                 this._setResult("error");
+             }
+             
+             _setResult(result) {
+                 this._result = result;
+                 setTimeout(() => {
+                     this._result = undefined;
+                 }, 2000);
+             }
+
+             _buttonTapped(ev) {
+                 if (this.progress) {
+                     ev.stopPropagation();
+                 }
+             }
+             static styles = css`
+      :host {
+        outline: none;
+        display: inline-block;
+        position: relative;
+
+             font-family: var(--paper-font-body1_-_font-family);
+             -webkit-font-smoothing: var(--paper-font-body1_-_-webkit-font-smoothing);
+             font-size: var(--paper-font-body1_-_font-size);
+             font-weight: var(--paper-font-body1_-_font-weight);
+             line-height: var(--paper-font-body1_-_line-height);
+
+
+      }
+
+      mwc-button {
+        transition: all 1s;
+      }
+
+      mwc-button.success {
+        --mdc-theme-primary: white;
+        background-color: var(--success-color);
+        transition: none;
+        border-radius: 4px;
+        pointer-events: none;
+      }
+
+      mwc-button[raised].success {
+        --mdc-theme-primary: var(--success-color);
+        --mdc-theme-on-primary: white;
+      }
+
+      mwc-button.error {
+        --mdc-theme-primary: white;
+        background-color: var(--error-color);
+        transition: none;
+        border-radius: 4px;
+        pointer-events: none;
+      }
+
+      mwc-button[raised].error {
+        --mdc-theme-primary: var(--error-color);
+        --mdc-theme-on-primary: white;
+      }
+
+      .progress {
+        bottom: 4px;
+        position: absolute;
+        text-align: center;
+        top: 4px;
+        width: 100%;
+      }
+
+      ha-svg-icon {
+        color: white;
+      }
+
+      mwc-button.success slot,
+      mwc-button.error slot {
+        visibility: hidden;
+      }`;
+         }
+         class HaFormfield extends FormfieldBase {
+             static properties = {
+                 disabled: { type: Boolean, reflect: true }
+             }
+             constructor() {
+                 super();
+                 this.disabled = false;
+             }
+             render() {
+                 const classes = {
+                     "mdc-form-field--align-end": this.alignEnd,
+                     "mdc-form-field--space-between": this.spaceBetween,
+                     "mdc-form-field--nowrap": this.nowrap,
+                 };
+                 
+                 return html` <div class="mdc-form-field ${classMap(classes)}">
+      <slot></slot>
+      <label class="mdc-label" @click=${this._labelClick}>
+        <slot name="label">${this.label}</slot>
+      </label>
+    </div>`;
+             }
+
+             _labelClick() {
+                 const input = this.input;
+                 if (!input) return;
+
+                 input.focus();
+                 if (input.disabled) {
+                     return;
+                 }
+                 switch (input.tagName) {
+                     case "HA-CHECKBOX":
+                         input.checked = !input.checked;
+                         fireEvent(input, "change");
+                         break;
+                     case "HA-RADIO":
+                         input.checked = true;
+                         fireEvent(input, "change");
+                         break;
+                     default:
+                         input.click();
+                         break;
+                 }
+             }
+
+             static styles = [
+                 formStyles,
+                 css`
+            :host(:not([alignEnd])) ::slotted(ha-switch) {
+              margin-right: 10px;
+              margin-inline-end: 10px;
+              margin-inline-start: inline;
+            }
+            .mdc-form-field {
+              align-items: var(--ha-formfield-align-items, center);
+              gap: 4px;
+            }
+            .mdc-form-field > label {
+              direction: var(--direction);
+              margin-inline-start: 0;
+              margin-inline-end: auto;
+              padding: 0;
+            }
+            :host([disabled]) label {
+              color: var(--disabled-text-color);
+            }`];
+         }
+         class HaRadio extends RadioBase {
+             static styles = [
+                 radioStyles,
+                 css`
+            :host {
+              --mdc-theme-secondary: var(--primary-color);
+            }
+                 `,
+             ];
+         }
+         class HaTextField extends TextFieldBase {
+             static properties = {
+                 invalid: { type: Boolean },
+                 errorMessage: { attribute: "error-message" },
+                 icon: { type: Boolean },
+                 iconTrailing: { type: Boolean },
+                 autocomplete: {},
+                 autocorrect: {},
+                 inputSpellcheck: { attribute: "input-spellcheck" }
+             }
+             //@query("input") formElement;
+             get formElement() {
+                 return this.shadowRoot.querySelector('input');
+             }
+             constructor() {
+                 super();
+                 this.invalid = null;
+                 this.icon = false;
+                 this.iconTrailing = false;
+             }
+             updated(changedProperties) {
+                 super.updated(changedProperties);
+                 if (
+                     changedProperties.has("invalid") ||
+                     changedProperties.has("errorMessage")
+                 ) {
+                     this.setCustomValidity(
+                         this.invalid
+                         ? this.errorMessage || this.validationMessage || "Invalid"
+                         : ""
+                     );
+                     if (
+                         this.invalid ||
+                         this.validateOnInitialRender ||
+                         (changedProperties.has("invalid") &&
+                          changedProperties.get("invalid") !== undefined)
+                     ) {
+                         // Only report validity if the field is invalid or the invalid state has changed from
+                         // true to false to prevent setting empty required fields to invalid on first render
+                         this.reportValidity();
+                     }
+                 }
+                 if (changedProperties.has("autocomplete")) {
+                     if (this.autocomplete) {
+                         this.formElement.setAttribute("autocomplete", this.autocomplete);
+                     } else {
+                         this.formElement.removeAttribute("autocomplete");
+                     }
+                 }
+                 if (changedProperties.has("autocorrect")) {
+                     if (this.autocorrect) {
+                         this.formElement.setAttribute("autocorrect", this.autocorrect);
+                     } else {
+                         this.formElement.removeAttribute("autocorrect");
+                     }
+                 }
+                 if (changedProperties.has("inputSpellcheck")) {
+                     if (this.inputSpellcheck) {
+                         this.formElement.setAttribute("spellcheck", this.inputSpellcheck);
+                     } else {
+                         this.formElement.removeAttribute("spellcheck");
+                     }
+                 }
+             }
+
+             renderIcon(
+                 _icon,
+                 isTrailingIcon = false
+             ) {
+                 const type = isTrailingIcon ? "trailing" : "leading";
+
+                 return html`
+                     <span
+                          class="mdc-text-field__icon mdc-text-field__icon--${type}"
+                          tabindex=${isTrailingIcon ? 1 : -1}
+                         >
+        <slot name="${type}Icon"></slot>
+                     </span>
+                 `;
+             }
+
+             static styles = [
+                 textfieldStyles,
+                 css`
+      .mdc-text-field__input {
+        width: var(--ha-textfield-input-width, 100%);
+      }
+      .mdc-text-field:not(.mdc-text-field--with-leading-icon) {
+        padding: var(--text-field-padding, 0px 16px);
+      }
+      .mdc-text-field__affix--suffix {
+        padding-left: var(--text-field-suffix-padding-left, 12px);
+        padding-right: var(--text-field-suffix-padding-right, 0px);
+        padding-inline-start: var(--text-field-suffix-padding-left, 12px);
+        padding-inline-end: var(--text-field-suffix-padding-right, 0px);
+        direction: ltr;
+      }
+      .mdc-text-field--with-leading-icon {
+        padding-inline-start: var(--text-field-suffix-padding-left, 0px);
+        padding-inline-end: var(--text-field-suffix-padding-right, 16px);
+        direction: var(--direction);
+      }
+
+      .mdc-text-field--with-leading-icon.mdc-text-field--with-trailing-icon {
+        padding-left: var(--text-field-suffix-padding-left, 0px);
+        padding-right: var(--text-field-suffix-padding-right, 0px);
+        padding-inline-start: var(--text-field-suffix-padding-left, 0px);
+        padding-inline-end: var(--text-field-suffix-padding-right, 0px);
+      }
+      .mdc-text-field:not(.mdc-text-field--disabled)
+        .mdc-text-field__affix--suffix {
+        color: var(--secondary-text-color);
+      }
+
+      .mdc-text-field:not(.mdc-text-field--disabled) .mdc-text-field__icon {
+        color: var(--secondary-text-color);
+      }
+
+      .mdc-text-field__icon--leading {
+        margin-inline-start: 16px;
+        margin-inline-end: 8px;
+        direction: var(--direction);
+      }
+
+      .mdc-text-field__icon--trailing {
+        padding: var(--textfield-icon-trailing-padding, 12px);
+      }
+
+      .mdc-floating-label:not(.mdc-floating-label--float-above) {
+        text-overflow: ellipsis;
+        width: inherit;
+        padding-right: 30px;
+        padding-inline-end: 30px;
+        padding-inline-start: initial;
+        box-sizing: border-box;
+        direction: var(--direction);
+      }
+
+      input {
+        text-align: var(--text-field-text-align, start);
+      }
+
+      /* Edge, hide reveal password icon */
+      ::-ms-reveal {
+        display: none;
+      }
+
+      /* Chrome, Safari, Edge, Opera */
+      :host([no-spinner]) input::-webkit-outer-spin-button,
+      :host([no-spinner]) input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      /* Firefox */
+      :host([no-spinner]) input[type="number"] {
+        -moz-appearance: textfield;
+      }
+
+      .mdc-text-field__ripple {
+        overflow: hidden;
+      }
+
+      .mdc-text-field {
+        overflow: var(--text-field-overflow);
+      }
+
+      .mdc-floating-label {
+        inset-inline-start: 16px !important;
+        inset-inline-end: initial !important;
+        transform-origin: var(--float-start);
+        direction: var(--direction);
+        text-align: var(--float-start);
+      }
+
+      .mdc-text-field--with-leading-icon.mdc-text-field--filled
+        .mdc-floating-label {
+        max-width: calc(
+          100% - 48px - var(--text-field-suffix-padding-left, 0px)
+        );
+        inset-inline-start: calc(
+          48px + var(--text-field-suffix-padding-left, 0px)
+        ) !important;
+        inset-inline-end: initial !important;
+        direction: var(--direction);
+      }
+
+      .mdc-text-field__input[type="number"] {
+        direction: var(--direction);
+      }
+      .mdc-text-field__affix--prefix {
+        padding-right: var(--text-field-prefix-padding-right, 2px);
+        padding-inline-end: var(--text-field-prefix-padding-right, 2px);
+        padding-inline-start: initial;
+      }
+
+      .mdc-text-field:not(.mdc-text-field--disabled)
+        .mdc-text-field__affix--prefix {
+        color: var(--mdc-text-field-label-ink-color);
+      }
+                 `,
+                 // safari workaround - must be explicit
+                 window.document.dir === "rtl"
+                 ? css`
+          .mdc-text-field--with-leading-icon,
+          .mdc-text-field__icon--leading,
+          .mdc-floating-label,
+          .mdc-text-field--with-leading-icon.mdc-text-field--filled
+            .mdc-floating-label,
+          .mdc-text-field__input[type="number"] {
+            direction: rtl;
+            --direction: rtl;
+          }
+                 `
+                 : css``,
+             ];
+         }
+    class HaPanelLovelace extends LitElement {
+        constructor() { super(); }
+    };
+    customElements.define('ha-panel-lovelace', HaPanelLovelace);
+
+         customElements.define('ha-slider', HaSlider);
+         customElements.define('ha-card', HaCard);
+         customElements.define('ha-progress-button', HaProgressButton);
+         customElements.define('ha-formfield', HaFormfield);
+         customElements.define('ha-radio', HaRadio);
+    customElements.define('ha-textfield', HaTextField);
+    window.LitElement = LitElement;
+    window.LitElement.prototype.html = html;
+    window.LitElement.prototype.css = css;
+    
+

@@ -1,0 +1,112 @@
+<html>
+    <!-- python3 -m http.server 8000 -d .. -->
+    <head>
+        <style>
+         html {
+             --primary-text-color: #212121;
+             --secondary-text-color: #727272;
+             --text-primary-color: #ffffff;
+             --text-light-primary-color: #212121;
+             --disabled-text-color: #bdbdbd;
+             --primary-color: #03a9f4;
+             --dark-primary-color: #0288d1;
+             --light-primary-color: #b3e5fc;
+             --accent-color: #ff9800;
+             --divider-color: rgba(0, 0, 0, 0.12);
+             --outline-color: rgba(0, 0, 0, 0.12);
+             --outline-hover-color: rgba(0, 0, 0, 0.24);
+             --scrollbar-thumb-color: rgb(194, 194, 194);
+             --error-color: #db4437;
+             --warning-color: #ffa600;
+             --success-color: #43a047;
+             --info-color: #039be5;
+             --card-background-color: #ffffff;
+             --primary-background-color: #fafafa;
+             --secondary-background-color: #e5e5e5;
+             --clear-background-color: #ffffff;
+
+             --paper-font-body1_-_font-family: var(--paper-font-common-base_-_font-family);
+             --paper-font-body1_-_-webkit-font-smoothing: var(--paper-font-common-base_-_-webkit-font-smoothing);
+             --paper-font-body1_-_font-size: 14px;
+             --paper-font-body1_-_font-weight: 400;
+             --paper-font-body1_-_line-height: 20px;
+             --paper-font-common-base_-_font-family: Roboto, Noto, sans-serif;
+             --paper-font-common-base_-_-webkit-font-smoothing: antialiased;
+             --paper-font-common-code_-_font-family: 'Roboto Mono', Consolas, Menlo, monospace;
+             --paper-font-common-code_-_-webkit-font-smoothing: antialiased;
+             --paper-font-common-expensive-kerning_-_text-rendering: optimizeLegibility;
+             --paper-font-common-nowrap_-_white-space: nowrap;
+             --paper-font-common-nowrap_-_overflow: hidden;
+             --paper-font-common-nowrap_-_text-overflow: ellipsis;         
+             --mdc-theme-primary: var(--primary-color);
+             --mdc-theme-secondary: var(--accent-color);
+             --mdc-theme-background: var(--primary-background-color);
+             --mdc-theme-surface: var(--card-background-color);
+             --mdc-theme-on-primary: var(--text-primary-color);
+             --mdc-theme-on-secondary: var(--text-primary-color);
+             --mdc-theme-on-surface: var(--primary-text-color);
+             --mdc-theme-text-disabled-on-light: var(--disabled-text-color);
+             --mdc-theme-text-primary-on-background: var(--primary-text-color);
+             --mdc-theme-text-secondary-on-background: var(--secondary-text-color);
+             --mdc-theme-text-hint-on-background: var(--secondary-text-color);
+             --mdc-theme-text-icon-on-background: var(--secondary-text-color);
+             --mdc-theme-error: var(--error-color);
+         }
+         ha-progress-button {
+             
+         }
+        </style>
+        <script type="importmap">
+         {
+             "imports": {
+                 "@material/web/": "https://esm.run/@material/web/",
+                 "@material/mwc-formfield/": "https://esm.run/@material/mwc-formfield/",
+                 "@material/mwc-button": "https://esm.run/@material/mwc-button",
+                 "@material/mwc-radio/": "https://esm.run/@material/mwc-radio/",
+                 "@material/mwc-textfield/": "https://esm.run/@material/mwc-textfield/"
+             }
+         }
+        </script>
+        <script type="module">
+        </script>
+        <script>
+         function waitForEvent(element, eventName) {
+             return new Promise((resolve) => {
+                 element.addEventListener(eventName, (event) => {
+                     resolve(event);
+                 });
+             });
+         }
+         async function loadScript(src, ttype) {
+             var script = document.createElement('script');
+             script.src = src;
+             if (ttype) {
+                 script.type = ttype;
+             }
+             script.id = "jalid";
+             document.head.appendChild(script);
+             await waitForEvent(script, 'load');
+         }
+         window.loadCardHelpers = async function() {
+             return { createRowElement: function(cfg) {
+                 console.log('nope', cfg);
+             }};
+         }
+         window.addEventListener('DOMContentLoaded', async function() {
+             await loadScript('./ha-lib.js', 'module');
+             //window.html = html;
+            //window.css = css;
+             await loadScript('../alert2.js');
+             var ao = document.createElement('alert2-overview');
+             let hass = {
+                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
+             };
+             ao.hass = hass;
+             document.body.appendChild(ao);
+         });
+        </script>
+    </head>
+    <body style="width: 30em;">
+        foo
+    </body>
+</html>
