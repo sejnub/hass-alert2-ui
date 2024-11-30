@@ -1,6 +1,9 @@
 <html>
-    <!-- python3 -m http.server 8000 -d .. -->
+    <!-- python3 -m http.server 8000 -d ..
+         then load http://localhost:8000/tests/t.html
+    -->
     <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
          html {
              --primary-text-color: #212121;
@@ -67,8 +70,6 @@
              }
          }
         </script>
-        <script type="module">
-        </script>
         <script>
          function waitForEvent(element, eventName) {
              return new Promise((resolve) => {
@@ -87,26 +88,75 @@
              document.head.appendChild(script);
              await waitForEvent(script, 'load');
          }
+         //let createRowElementHass = null;
          window.loadCardHelpers = async function() {
              return { createRowElement: function(cfg) {
+                 var er = document.createElement('hui-alert2-entity-row');
+                 er.setConfig(cfg);
+                 //er.hass = createRowElementHass;
                  console.log('nope', cfg);
+                 return er;
              }};
          }
          window.addEventListener('DOMContentLoaded', async function() {
              await loadScript('./ha-lib.js', 'module');
-             //window.html = html;
-            //window.css = css;
              await loadScript('../alert2.js');
+             await doTest();
+         });
+         function jassert(abool) {
+             if (!abool) {
+                 throw new Error("assert failed");
+             }
+         }
+         function sleepMs(ms) {
+             return new Promise(resolve => setTimeout(resolve, ms));
+         }
+         function getRecentIso(msAgo) {
+             return (new Date((new Date()).getTime() - msAgo)).toISOString();
+         }
+         async function doTest() {
+             let testStatusEl = document.querySelector('#testStatus');
+             testStatusEl.innerHTML = "Test: Running tests...";
              var ao = document.createElement('alert2-overview');
              let hass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
              };
+             //createRowElementHass = hass;
              ao.hass = hass;
+             ao._updateIntervalMs = 50;
              document.body.appendChild(ao);
-         });
+             await sleepMs(5);
+             let tEl = ao.shadowRoot.querySelector('div#jempt');
+             jassert(tEl.innerHTML.includes('No alerts active'));
+             jassert(tEl.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+
+             // Wait a bit for a few refresh cycles, no update should happen.
+             await sleepMs(150);
+             tEl = ao.shadowRoot.querySelector('div#jempt');
+             jassert(tEl.innerHTML.includes('No alerts active'));
+             jassert(tEl.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+
+             // Old alert should not show up.
+             hass.states['alert2.foo'] = { state: 'off', attributes: { 'last_on_time': getRecentIso(7 * 60*60*1000), 'last_off_time': getRecentIso(6 * 60 * 60 * 1000), 'notification_control': NOTIFICATIONS_ENABLED, 'last_ack_time': getRecentIso(200), 'fires_since_last_notify': 0 }, entity_id: 'alert2.foo' };
+             await sleepMs(60);
+             tEl = ao.shadowRoot.querySelector('div#jempt');
+             jassert(tEl.innerHTML.includes('No alerts active'));
+             jassert(tEl.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+             
+             // Alert fires. It should show up
+             hass.states['alert2.foo'] = { state: 'on', attributes: { 'last_on_time': getRecentIso(100), 'last_off_time': getRecentIso(150), 'notification_control': NOTIFICATIONS_ENABLED, 'last_ack_time': getRecentIso(200), 'fires_since_last_notify': 0 }, entity_id: 'alert2.foo' };
+             ao.hass = hass;
+             await sleepMs(60);
+             tEl = ao.shadowRoot.querySelector('div.jEvWrapper');
+             jassert(tEl.innerHTML.includes('alert2-entity-row'));
+             
+             //ao.remove();
+             
+             testStatusEl.innerHTML = "Test: Done.";
+         }
         </script>
     </head>
     <body style="width: 30em;">
-        foo
+        <h2 id="testStatus">Test: Loading libraries...</h2>
     </body>
 </html>

@@ -37,6 +37,8 @@ class Alert2Overview extends LitElement {
         this._sliderVal = 3;// 4 hours
         window.loadCardHelpers().then(hs => { this._cardHelpers = hs; });
         this._hass = null;
+        this._updateTimer = null;
+        this._updateIntervalMs = 60000;
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -58,11 +60,12 @@ class Alert2Overview extends LitElement {
         super.connectedCallback();
         let outerThis = this;
         let func = function() { outerThis.jrefresh(); }
-        this._updateTimer = setInterval(func, 10*1000);
+        this._updateTimer = setInterval(func, this._updateIntervalMs);
     }
     disconnectedCallback() {
-        clearInterval(this._updateTimer);
         super.disconnectedCallback();
+        clearInterval(this._updateTimer);
+        this._updateTimer = null;
     }
     setConfig(config) {
         this._config = config;

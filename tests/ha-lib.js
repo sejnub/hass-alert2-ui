@@ -529,6 +529,12 @@
     class HaPanelLovelace extends LitElement {
         constructor() { super(); }
     };
+    class StateBadge extends LitElement {
+        render() {
+            return html`<div style="width: 20px; height: 20px; border: 1px solid green;">!</div>`;
+        }
+    };
+    customElements.define('state-badge', StateBadge);
     customElements.define('ha-panel-lovelace', HaPanelLovelace);
 
          customElements.define('ha-slider', HaSlider);
@@ -540,5 +546,3 @@
     window.LitElement = LitElement;
     window.LitElement.prototype.html = html;
     window.LitElement.prototype.css = css;
-    
-
