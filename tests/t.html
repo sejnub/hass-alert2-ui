@@ -116,6 +116,7 @@
          }
          async function doTest() {
              let testStatusEl = document.querySelector('#testStatus');
+             let testDiv = document.querySelector('#testDiv');
              testStatusEl.innerHTML = "Test: Running tests...";
              var ao = document.createElement('alert2-overview');
              let hass = {
@@ -124,7 +125,7 @@
              //createRowElementHass = hass;
              ao.hass = hass;
              ao._updateIntervalMs = 50;
-             document.body.appendChild(ao);
+             testDiv.appendChild(ao);
              await sleepMs(5);
              let tEl = ao.shadowRoot.querySelector('div#jempt');
              jassert(tEl.innerHTML.includes('No alerts active'));
@@ -156,7 +157,8 @@
          }
         </script>
     </head>
-    <body style="width: 30em;">
+    <body>
         <h2 id="testStatus">Test: Loading libraries...</h2>
+        <div id="testDiv" style="width: 100%; max-width: 30em;"></div>
     </body>
 </html>
