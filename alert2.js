@@ -272,52 +272,48 @@ class Alert2Overview extends LitElement {
         }
         const intervalSecs = this._sliderValArr[this._sliderVal].secs;
         let entities = new Map();
-        let nowSecs = Date.now() / 1000.0;
+        let nowMs = Date.now();
         for (let entityName in this._hass.states) {
             if (entityName.startsWith('alert.')) {
                 let ent = this._hass.states[entityName];
+                let lastChangeMs = Date.parse(ent.last_changed);
                 if (ent.state == 'idle') {
-                    let lastOffSecs = Date.parse(ent.last_changed) / 1000.0;
-                    let agoSecs = nowSecs - lastOffSecs;
-                    if (agoSecs < intervalSecs) {
-                        //entities.set(entityName, nowSecs);
-                    }
                 } else if (ent.state == 'on') {
                     //console.log('Adding old ', entityName);
-                    entities.set(entityName, nowSecs);
+                    entities.set(entityName, lastChangeMs);
                 }
             } else if (entityName.startsWith('alert2.')) {
                 let ent = this._hass.states[entityName];
-                let lastFireSecs = 0; // 1970
+                let lastFireMs = 0; // 1970
                 if (ent.state) {
                     if ('last_on_time' in ent.attributes) {
                         // Is a level-triggered alert
                         if (ent.state == 'on') {
-                            lastFireSecs = nowSecs;
+                            lastFireMs = Date.parse(ent.attributes['last_on_time']);
                         } else if (ent.state == 'off') {
                             if (ent.attributes['last_off_time']) {
-                                lastFireSecs = Date.parse(ent.attributes['last_off_time']) / 1000.0;
+                                lastFireMs = Date.parse(ent.attributes['last_off_time']);
                             } // else never fired
                         } else {
                             console.error('Entity state is not on/off', ent.state, entityName);
                         }
                     } else {
                         // Edge triggered alert
-                        lastFireSecs = Date.parse(ent.state) / 1000.0;
+                        lastFireMs = Date.parse(ent.state);
                     }
                 }
-                if (isNaN(lastFireSecs)) {
-                    console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireSecs', lastFireSecs);
+                if (isNaN(lastFireMs)) {
+                    console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireMs', lastFireMs);
                 } else {
                     const not_enabled = (ent.attributes.notification_control &&
                                          (ent.attributes.notification_control != NOTIFICATIONS_ENABLED));
-                    let agoSecs = nowSecs - lastFireSecs;
-                    if (agoSecs < intervalSecs) {
+                    let agoMs = nowMs - lastFireMs;
+                    if (agoMs < (intervalSecs * 1000)) {
                         //console.log('Adding new recent ', entityName);
-                        entities.set(entityName, lastFireSecs);
+                        entities.set(entityName, lastFireMs);
                     } else if (not_enabled) {
                         //console.log('Adding new disabled ', entityName);
-                        entities.set(entityName, lastFireSecs);
+                        entities.set(entityName, lastFireMs);
                     }
                 }
             }
@@ -407,9 +403,12 @@ class Alert2EntityRow extends LitElement  {
         display: flex;
         flex-flow: row wrap;
         align-items: center;
+        justify-content: space-between;
       }
       .outhead, .astate {
-        max-width: max-content; /* flex: once heading has enough room, give rest to state  and vice versa */
+       /* note max-content I think ignores flex basis.
+        * so setting flex-basis in children may make things not fit. */
+        max-width: max-content; /* flex: once heading has enough room, give rest to state */
       }
       .outhead {
         display: flex;
@@ -419,7 +418,6 @@ class Alert2EntityRow extends LitElement  {
       }
       .astate {
         flex: 0 0 auto;
-        margin-left: auto; /* push it to the right, when flex wraps onto second row */
       }
       .awrapper {
         display: flex;
@@ -440,7 +438,8 @@ class Alert2EntityRow extends LitElement  {
         text-overflow: ellipsis;
       }
       state-badge {
-        flex: 0 0 40px;  /* set fixed width */
+        /* can't use flex basis to set width here, cuz it messes up the max-content directive in parent */
+        flex: 0 0 auto; 
         line-height: normal;
         height: auto;
       }

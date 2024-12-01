@@ -93,8 +93,6 @@
              return { createRowElement: function(cfg) {
                  var er = document.createElement('hui-alert2-entity-row');
                  er.setConfig(cfg);
-                 //er.hass = createRowElementHass;
-                 console.log('nope', cfg);
                  return er;
              }};
          }
@@ -115,15 +113,20 @@
              return (new Date((new Date()).getTime() - msAgo)).toISOString();
          }
          async function doTest() {
+             function cloneHass(ahass) {
+                 return {
+                     states: Object.assign({}, ahass['states'])
+                 };
+             }
              let testStatusEl = document.querySelector('#testStatus');
              let testDiv = document.querySelector('#testDiv');
              testStatusEl.innerHTML = "Test: Running tests...";
              var ao = document.createElement('alert2-overview');
-             let hass = {
+             let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
              };
              //createRowElementHass = hass;
-             ao.hass = hass;
+             ao.hass = newHass;
              ao._updateIntervalMs = 50;
              testDiv.appendChild(ao);
              await sleepMs(5);
@@ -137,19 +140,62 @@
              jassert(tEl.innerHTML.includes('No alerts active'));
              jassert(tEl.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
 
+             function createState(name, onAgoMs, offAgoMs, ackAgoMs=200) {
+                 return { state: (offAgoMs < onAgoMs) ? 'off':'on',
+                          attributes: { 'last_on_time': getRecentIso(onAgoMs),
+                                        'last_off_time': getRecentIso(offAgoMs),
+                                        'notification_control': NOTIFICATIONS_ENABLED,
+                                        'last_ack_time': getRecentIso(ackAgoMs),
+                                        'fires_since_last_notify': 0 },
+                          entity_id: 'alert2.'+name };
+             }
+
+             
              // Old alert should not show up.
-             hass.states['alert2.foo'] = { state: 'off', attributes: { 'last_on_time': getRecentIso(7 * 60*60*1000), 'last_off_time': getRecentIso(6 * 60 * 60 * 1000), 'notification_control': NOTIFICATIONS_ENABLED, 'last_ack_time': getRecentIso(200), 'fires_since_last_notify': 0 }, entity_id: 'alert2.foo' };
+             newHass = cloneHass(newHass);
+             newHass.states['alert2.foo'] = createState('foo', 7 * 60*60*1000, 6 * 60 * 60 * 1000);
+             ao.hass = newHass;
              await sleepMs(60);
              tEl = ao.shadowRoot.querySelector('div#jempt');
              jassert(tEl.innerHTML.includes('No alerts active'));
              jassert(tEl.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
              
              // Alert fires. It should show up
-             hass.states['alert2.foo'] = { state: 'on', attributes: { 'last_on_time': getRecentIso(100), 'last_off_time': getRecentIso(150), 'notification_control': NOTIFICATIONS_ENABLED, 'last_ack_time': getRecentIso(200), 'fires_since_last_notify': 0 }, entity_id: 'alert2.foo' };
-             ao.hass = hass;
+             newHass = cloneHass(newHass);
+             newHass.states['alert2.foo'] = createState('foo', 100, 150);
+             ao.hass = newHass;
              await sleepMs(60);
              tEl = ao.shadowRoot.querySelector('div.jEvWrapper');
              jassert(tEl.innerHTML.includes('alert2-entity-row'));
+
+             // If alert fires along with sensor.alert2_change_count, then should show immediately
+             newHass = cloneHass(newHass);
+             newHass.states['alert2.foo2'] = createState('foo2', 100, 150);
+             newHass.states['sensor.alert2_change_count'] = { state: '77' };
+             ao.hass = newHass;
+             await sleepMs(10);
+             let tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             jassert(tEls.length == 2);
+             // Let's assert that most recent one is first
+             jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo2'));
+
+
+             // Test ordering of alerts that are on.  first one is off.  All are acked.
+             // Off alert fired more recently than on ones.
+             newHass = cloneHass(newHass);
+             newHass.states['alert2.foo'] = createState('foo', 150, 100);
+             newHass.states['alert2.foo2'] = createState('foo2', 300, 1000, 100);
+             newHass.states['alert2.foo3'] = createState('foo3', 200, 1000, 100);
+             newHass.states['alert2.foo4'] = createState('foo4', 500, 1000, 100);
+             newHass.states['sensor.alert2_change_count'] = { state: '78' };
+             ao.hass = newHass;
+             await sleepMs(10);
+             tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             jassert(tEls.length == 4);
+             // Let's assert that most recent one is first
+             jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo3'));
+
+
              
              //ao.remove();
              
