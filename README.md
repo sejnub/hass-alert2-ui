@@ -124,6 +124,15 @@ Note - `alert2-overview` will show currently firing old Alert-1 alerts, but it w
 
 ![Alert2 overview card](resources/overview.png)
 
+The order of displayed alerts is:
+1. Alerts currently on and unacked, most recent first
+1. Alerts currently off and unacked, most recent first. This includes event alerts.
+1. Alerts currently on and acked, most recent first
+1. Alerts currently off and acked, most recent first. This includes event alerts.
+
+For the purpose of ordering, alerts that are snoozed or disabled are treated as if acked.
+
+
 ### Detailed alert info
 
 If you click on a specific alert listed in the alert overview, a dialog pops up with detailed info on the alert and notification controls. Example:

@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.2  (internal 35)';
+const VERSION = 'v1.5.2  (internal 41)';
 console.log(`alert2 ${VERSION}`);
 
 // A custom card that lists alerts that have fired recently
@@ -51,23 +51,24 @@ class Alert2Overview extends LitElement {
         }
 
         if (oldHass) {
-            for (let entityName in newHass.states) {
-                if (entityName.startsWith('alert2.')) {
-                    if (!(entityName in oldHass.states) ||
-                        (newHass.states[entityName] !== oldHass.states[entityName])) {
-                        this.jrefresh();
-                        return;
-                    }
-                }
-            }
             // sensor.alert2_change_count is unecessary as long as we do jrefresh on every alert2 domain change.
-            if (0) {
+            if (1) {
                 // sensor.alert2_change_count is a performance optimization so we can limit how
                 // often we have to scan for new entities to include in the recent alert list.
                 // It changes each time any alert fires.
                 const entityId = 'sensor.alert2_change_count';
-                if (newHass && (!oldHass || (oldHass.states[entityId] !== newHass.states[entityId]))) {
+                if (!newHass || (oldHass.states[entityId] !== newHass.states[entityId])) {
                     this.jrefresh();
+                }
+            } else {
+                for (let entityName in newHass.states) {
+                    if (entityName.startsWith('alert2.')) {
+                        if (!(entityName in oldHass.states) ||
+                            (newHass.states[entityName] !== oldHass.states[entityName])) {
+                            this.jrefresh();
+                            return;
+                        }
+                    }
                 }
             }
         } else {
@@ -78,6 +79,8 @@ class Alert2Overview extends LitElement {
     connectedCallback() {
         super.connectedCallback();
         let outerThis = this;
+        // The purpose of this interval timer is to remove from display old alerts that fall outside
+        // the displayed time window.
         let func = function() { outerThis.jrefresh(); }
         this._updateTimer = setInterval(func, this._updateIntervalMs);
     }
@@ -147,7 +150,8 @@ class Alert2Overview extends LitElement {
                 // Only acked alerts
                 //entListHtml = html`<div id="nounacks">No unacked alerts that haven't been snoozed or disabled</div>
                 //                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
-                entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
+                entListHtml = html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>
+                                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
             } else if (ackedIdx == -1) {
                 // No acked alerts
                 entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
@@ -290,6 +294,7 @@ class Alert2Overview extends LitElement {
 
     // Returns true if changed list of entities.
     jrefresh() {
+        //console.log('calling jrefresh');
         if (!this._hass) {
             console.log('skipping jrefresh cuz no hass');
             return false;
@@ -314,13 +319,16 @@ class Alert2Overview extends LitElement {
                 } // else is off, which means acked, or is idle which means is off.
             } else if (entityName.startsWith('alert2.')) {
                 let lastAckMs = 0;
-                if ('last_ack_time' in ent.attributes) {
+                if (ent.attributes['last_ack_time']) {
                     lastAckMs = Date.parse(ent.attributes['last_ack_time']);
                 }
                 if ('last_on_time' in ent.attributes) {
                     // Is a condition alert
-                    const lastOnMs = Date.parse(ent.attributes['last_on_time']);
-                    isAcked = lastAckMs > lastOnMs;
+                    let lastOnMs = 0;
+                    if (ent.attributes['last_on_time']) {
+                        lastOnMs = Date.parse(ent.attributes['last_on_time']);
+                        isAcked = lastAckMs > lastOnMs;
+                    }
                     if (ent.state == 'on') {
                         isOn = true;
                         testMs = Date.parse(ent.attributes['last_on_time']);
@@ -371,7 +379,15 @@ class Alert2Overview extends LitElement {
             return true;
         } else {
             for (let idx = 0 ; idx < sortedDispInfos.length; idx ++) {
-                if (sortedDispInfos[idx].entityName !== this._sortedDispInfos[idx].entityName) {
+                let olde = this._sortedDispInfos[idx];
+                let newe = sortedDispInfos[idx];
+                if (newe.entityName !== olde.entityName) {
+                    this._sortedDispInfos = sortedDispInfos;
+                    return true;
+                }
+                if (newe.isOn != olde.isOn ||
+                    newe.isAcked != olde.isAcked ||
+                    newe.testMs != newe.testMs) {
                     this._sortedDispInfos = sortedDispInfos;
                     return true;
                 }
@@ -574,7 +590,7 @@ class HaAlert2State extends LitElement {
     }
     async ackInternal(ev, isAck) {
         let op = isAck ? 'ack' : 'unack';
-        console.log(`${op} clicked`);
+        console.log(`${op} clicked`, this._stateObj.entity_id);
         this._ackInProgress = true;
         let abutton = ev.target;
         ev.stopPropagation();
