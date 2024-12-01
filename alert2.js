@@ -13,14 +13,14 @@ class Alert2Overview extends LitElement {
     // has good description of reactive properties
     static properties = {
         _config: {state: true},
-        _shownEntities: {state: true},
+        _sortedDispInfos: {state: true},
         _cardHelpers: {state: true},
         _ackAllInProgress: {state: true},
         _showVersion: {state: true}
     }
     constructor() {
         super();
-        this._shownEntities = new Map();
+        this._sortedDispInfos = [];
         this._updateTimer = null;
         this._cardHelpers = null;
         this._ackAllInProgress = false;
@@ -41,19 +41,34 @@ class Alert2Overview extends LitElement {
         this._updateIntervalMs = 60000;
     }
     set hass(newHass) {
-        const oldHass = this._hass;
+        let oldHass = this._hass;
         this._hass = newHass;
-        // sensor.alert2_change_count is a performance optimization so we can limit how
-        // often we have to scan for new entities to include in the recent alert list.
-        // It changes each time any alert fires.
-        const entityId = 'sensor.alert2_change_count';
-        if (newHass && (!oldHass || (oldHass.states[entityId] !== newHass.states[entityId]))) {
-            this.jrefresh();
-        }
         if (this.shadowRoot && this._hass) {
             this.shadowRoot.querySelectorAll("hui-alert2-entity-row").forEach((elem) => {
                 elem.hass = this._hass;
             });
+        }
+
+        if (oldHass) {
+            for (let entityName in newHass.states) {
+                if (entityName.startsWith('alert2.')) {
+                    if (!(entityName in oldHass.states) ||
+                        (newHass.states[entityName] !== oldHass.states[entityName])) {
+                        this.jrefresh();
+                        return;
+                    }
+                }
+            }
+            // sensor.alert2_change_count is unecessary as long as we do jrefresh on every alert2 domain change.
+            if (0) {
+                // sensor.alert2_change_count is a performance optimization so we can limit how
+                // often we have to scan for new entities to include in the recent alert list.
+                // It changes each time any alert fires.
+                const entityId = 'sensor.alert2_change_count';
+                if (newHass && (!oldHass || (oldHass.states[entityId] !== newHass.states[entityId]))) {
+                    this.jrefresh();
+                }
+            }
         }
     }
     connectedCallback() {
@@ -69,18 +84,6 @@ class Alert2Overview extends LitElement {
     }
     setConfig(config) {
         this._config = config;
-    }
-    shouldUpdate(changedProps) {
-        if (changedProps.has('hass')) {
-        }
-        if (changedProps.has('_shownEntities') ||
-            changedProps.has('_config') ||
-            changedProps.has('_cardHelpers') ||
-            changedProps.has('_showVersion') ||
-            changedProps.has('_ackAllInProgress')) {
-            return true;
-        }
-        return false;
     }
     // Slider changed value
     slideCh(ev) {
@@ -114,20 +117,18 @@ class Alert2Overview extends LitElement {
         this._showVersion = ! this._showVersion;
     }
     render() {
+        console.log('render');
         if (!this._cardHelpers || !this._hass) {
             return html`<div>Loading.. waiting for hass + card helpers to load</div>`;
         }
 
         const outerThis = this;
         let entListHtml;
-        if (this._shownEntities.size == 0) {
+        if (this._sortedDispInfos.length == 0) {
             entListHtml = html`<div id="jempt">No alerts active in the past ${this._sliderValArr[this._sliderVal].str}. No alerts snoozed or disabled.</div>`;
         } else {
             // entitiesConf can be just a list of string entity names, or it can be a list of configs. maybe both.
-            let sortedEntities = Array.from(this._shownEntities.keys()).sort((a,b)=>
-                (this._shownEntities.get(a) == this._shownEntities.get(b)) ? (a < b) :
-                    (this._shownEntities.get(a) < this._shownEntities.get(b)));
-            let entitiesConf = sortedEntities.map(entName=>({ entity: entName }));
+            let entitiesConf = this._sortedDispInfos.map(obj=>({ entity: obj.entityName }));
             for (let aconf of entitiesConf) {
                 if (aconf.entity.startsWith('alert2.')) {
                     // 'custom:' gets stripped off in src/panels/lovelace/create-element/create-element-base.ts
@@ -137,8 +138,21 @@ class Alert2Overview extends LitElement {
                     // aconf.tap_action = { action: "fire-dom-event" };
                 }
             }
-            entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf)
-                                )}`;
+
+            let ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked);
+            if (ackedIdx == 0) {
+                // Only acked alerts
+                entListHtml = html`<div id="nounacks">No unacked alerts that haven't been snoozed or disabled</div>
+                                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
+            } else if (ackedIdx == -1) {
+                // No acked alerts
+                entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
+            } else {
+                // some acked and unacked
+                entListHtml = html`${entitiesConf.slice(0, ackedIdx).map((entityConf) => this.renderEntity(entityConf) )}
+                                   <div id="ackbar">---- Acked, snoozed or disabled ---</div>
+                                   ${entitiesConf.slice(ackedIdx).map((entityConf) => this.renderEntity(entityConf) )}`;
+            }
         }
         let manifestVersion = 'unknown';
         let mObj = this._hass.states['binary_sensor.alert2_ha_startup_done'];
@@ -264,71 +278,97 @@ class Alert2Overview extends LitElement {
           padding-right: 0.7em;
       }
     `;
-    
+
+    // Returns true if changed list of entities.
     jrefresh() {
         if (!this._hass) {
             console.log('skipping jrefresh cuz no hass');
-            return;
+            return false;
         }
         const intervalSecs = this._sliderValArr[this._sliderVal].secs;
-        let entities = new Map();
-        let nowMs = Date.now();
+        //console.log('intervalSecs as hours', intervalSecs / 60 / 60);
+        const nowMs = Date.now();
+        const intervalStartMs = nowMs - (intervalSecs*1000);
+        let entDispInfos = [];
+        let unsortedEnts = [];
         for (let entityName in this._hass.states) {
+            let isAcked = false;
+            let isOn = false;
+            let testMs = 0; // 1970
+            const ent = this._hass.states[entityName];
             if (entityName.startsWith('alert.')) {
-                let ent = this._hass.states[entityName];
-                let lastChangeMs = Date.parse(ent.last_changed);
-                if (ent.state == 'idle') {
-                } else if (ent.state == 'on') {
-                    //console.log('Adding old ', entityName);
-                    entities.set(entityName, lastChangeMs);
-                }
+                if (ent.state == 'on') { // on means unacked
+                    let lastChangeMs = Date.parse(ent.last_changed);
+                    isOn = true;
+                    testMs =  lastChangeMs;
+                    entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                } // else is off, which means acked, or is idle which means is off.
             } else if (entityName.startsWith('alert2.')) {
-                let ent = this._hass.states[entityName];
-                let lastFireMs = 0; // 1970
-                if (ent.state) {
-                    if ('last_on_time' in ent.attributes) {
-                        // Is a level-triggered alert
-                        if (ent.state == 'on') {
-                            lastFireMs = Date.parse(ent.attributes['last_on_time']);
-                        } else if (ent.state == 'off') {
-                            if (ent.attributes['last_off_time']) {
-                                lastFireMs = Date.parse(ent.attributes['last_off_time']);
-                            } // else never fired
-                        } else {
-                            console.error('Entity state is not on/off', ent.state, entityName);
-                        }
+                let lastAckMs = 0;
+                if ('last_ack_time' in ent.attributes) {
+                    lastAckMs = Date.parse(ent.attributes['last_ack_time']);
+                }
+                if ('last_on_time' in ent.attributes) {
+                    // Is a condition alert
+                    const lastOnMs = Date.parse(ent.attributes['last_on_time']);
+                    isAcked = lastAckMs > lastOnMs;
+                    if (ent.state == 'on') {
+                        isOn = true;
+                        testMs = Date.parse(ent.attributes['last_on_time']);
+                    } else if (ent.state == 'off') {
+                        if (ent.attributes['last_off_time']) {
+                            testMs = Date.parse(ent.attributes['last_off_time']);
+                        } // else never fired
                     } else {
-                        // Edge triggered alert
-                        lastFireMs = Date.parse(ent.state);
+                        console.error('Entity state is not on/off', ent.state, entityName);
                     }
-                }
-                if (isNaN(lastFireMs)) {
-                    console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireMs', lastFireMs);
                 } else {
-                    const not_enabled = (ent.attributes.notification_control &&
-                                         (ent.attributes.notification_control != NOTIFICATIONS_ENABLED));
-                    let agoMs = nowMs - lastFireMs;
-                    if (agoMs < (intervalSecs * 1000)) {
-                        //console.log('Adding new recent ', entityName);
-                        entities.set(entityName, lastFireMs);
-                    } else if (not_enabled) {
-                        //console.log('Adding new disabled ', entityName);
-                        entities.set(entityName, lastFireMs);
-                    }
+                    // Edge triggered alert
+                    let lastFireMs = Date.parse(ent.state);
+                    isAcked = lastAckMs > lastFireMs;
+                    testMs = lastFireMs;
+                }
+                if (isNaN(testMs)) {
+                    console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireMs', testMs);
+                    continue;
+                }
+                const not_enabled = (ent.attributes.notification_control &&
+                                     (ent.attributes.notification_control != NOTIFICATIONS_ENABLED));
+                if (not_enabled) {
+                    isAcked = true;  // treat snoozed or disabled alerts as already acked
+                }
+                //console.log('considering ', entityName, testMs - intervalStartMs);
+                if (isOn || intervalStartMs < testMs || not_enabled) {
+                    entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
                 }
             }
         }
-        
-        if (entities.size !== this._shownEntities.size) {
-            this._shownEntities = entities;
+
+        // Now sort the entities. return negative if a should come before b
+        let sortFunc = function(a, b) {
+            if (a.isAcked != b.isAcked) {
+                return a.isAcked ? 1 : -1;
+            } else if (a.isOn != b.isOn) {
+                return a.isOn ? -1 : 1;
+            } else {
+                return b.testMs - a.testMs;
+            }
+        }
+        let sortedDispInfos = entDispInfos.sort(sortFunc);
+        if (sortedDispInfos.length !== this._sortedDispInfos.length) {
+            console.log('update sortedDispInfos to', sortedDispInfos);
+            this._sortedDispInfos = sortedDispInfos;
+            return true;
         } else {
-            for (const entName of entities.keys()) {
-                if (!this._shownEntities.has(entName)) {
-                    this._shownEntities = entities;
-                    return;
+            for (let idx = 0 ; idx < sortedDispInfos.length; idx ++) {
+                if (sortedDispInfos[idx].entityName !== this._sortedDispInfos[idx].entityName) {
+                    console.log('update2 sortedDispInfos to', sortedDispInfos);
+                    this._sortedDispInfos = sortedDispInfos;
+                    return true;
                 }
             }
         }
+        return false;
     }
 }
 
@@ -569,7 +609,9 @@ class HaAlert2State extends LitElement {
         if (last_on_time) {
             last_fired_time = last_on_time;
             if (ent.state == 'on') {
-                msg = 'on';
+                //msg = 'on';
+                const last_on_time = Date.parse(ent.attributes['last_on_time']);
+                msg = html`on<j-relative-time .timestamp=${last_on_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
             } else if (ent.state == 'off') {
                 const last_off_time = Date.parse(ent.attributes['last_off_time']);
                 msg = html`off<j-relative-time .timestamp=${last_off_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
