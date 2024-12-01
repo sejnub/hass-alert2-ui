@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.2  (internal 41)';
+const VERSION = 'v1.5.2  (internal 42)';
 console.log(`alert2 ${VERSION}`);
 
 // A custom card that lists alerts that have fired recently
