@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.1  (internal 34)';
+const VERSION = 'v1.5.2  (internal 35)';
 console.log(`alert2 ${VERSION}`);
 
 // A custom card that lists alerts that have fired recently
@@ -16,7 +16,8 @@ class Alert2Overview extends LitElement {
         _sortedDispInfos: {state: true},
         _cardHelpers: {state: true},
         _ackAllInProgress: {state: true},
-        _showVersion: {state: true}
+        _showVersion: {state: true},
+        _sliderVal: {state: true}
     }
     constructor() {
         super();
@@ -41,7 +42,7 @@ class Alert2Overview extends LitElement {
         this._updateIntervalMs = 60000;
     }
     set hass(newHass) {
-        let oldHass = this._hass;
+        const oldHass = this._hass;
         this._hass = newHass;
         if (this.shadowRoot && this._hass) {
             this.shadowRoot.querySelectorAll("hui-alert2-entity-row").forEach((elem) => {
@@ -69,6 +70,9 @@ class Alert2Overview extends LitElement {
                     this.jrefresh();
                 }
             }
+        } else {
+            // Probably is first rendering
+            this.jrefresh();
         }
     }
     connectedCallback() {
@@ -117,7 +121,6 @@ class Alert2Overview extends LitElement {
         this._showVersion = ! this._showVersion;
     }
     render() {
-        console.log('render');
         if (!this._cardHelpers || !this._hass) {
             return html`<div>Loading.. waiting for hass + card helpers to load</div>`;
         }
@@ -142,8 +145,9 @@ class Alert2Overview extends LitElement {
             let ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked);
             if (ackedIdx == 0) {
                 // Only acked alerts
-                entListHtml = html`<div id="nounacks">No unacked alerts that haven't been snoozed or disabled</div>
-                                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
+                //entListHtml = html`<div id="nounacks">No unacked alerts that haven't been snoozed or disabled</div>
+                //                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
+                entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
             } else if (ackedIdx == -1) {
                 // No acked alerts
                 entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
@@ -277,6 +281,11 @@ class Alert2Overview extends LitElement {
       .tversions td:first-child {
           padding-right: 0.7em;
       }
+      div#ackbar {
+          margin-bottom: 1em;
+          text-align: center;
+          font-size: 0.9em;
+      }
     `;
 
     // Returns true if changed list of entities.
@@ -324,9 +333,11 @@ class Alert2Overview extends LitElement {
                     }
                 } else {
                     // Edge triggered alert
-                    let lastFireMs = Date.parse(ent.state);
-                    isAcked = lastAckMs > lastFireMs;
-                    testMs = lastFireMs;
+                    if (ent.state) {
+                        let lastFireMs = Date.parse(ent.state);
+                        isAcked = lastAckMs > lastFireMs;
+                        testMs = lastFireMs;
+                    } // else alert has never fired
                 }
                 if (isNaN(testMs)) {
                     console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireMs', testMs);
@@ -356,13 +367,11 @@ class Alert2Overview extends LitElement {
         }
         let sortedDispInfos = entDispInfos.sort(sortFunc);
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
-            console.log('update sortedDispInfos to', sortedDispInfos);
             this._sortedDispInfos = sortedDispInfos;
             return true;
         } else {
             for (let idx = 0 ; idx < sortedDispInfos.length; idx ++) {
                 if (sortedDispInfos[idx].entityName !== this._sortedDispInfos[idx].entityName) {
-                    console.log('update2 sortedDispInfos to', sortedDispInfos);
                     this._sortedDispInfos = sortedDispInfos;
                     return true;
                 }
@@ -591,7 +600,6 @@ class HaAlert2State extends LitElement {
     }
     render() {
         if (!this._stateObj) {
-            console.warn('foo, not ready to render');
             return html`<div>loading...</div>`;
         }
         const ent = this._stateObj;

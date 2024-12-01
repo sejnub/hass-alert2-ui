@@ -1,6 +1,7 @@
          import {LitElement, html, css} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
          import { FormfieldBase } from "@material/mwc-formfield/mwc-formfield-base";
          import { MdSlider } from "@material/web/slider/slider";
+         import { mdiAlertOctagram, mdiCheckBold } from "@mdi/js";
          import { styles as formStyles } from "@material/mwc-formfield/mwc-formfield.css";
          import "@material/mwc-button";
          import { RadioBase } from "@material/mwc-radio/mwc-radio-base";
