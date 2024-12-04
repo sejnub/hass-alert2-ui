@@ -4,8 +4,10 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.2  (internal 42)';
+const VERSION = 'v1.5.2  (internal 43)';
 console.log(`alert2 ${VERSION}`);
+
+let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -22,6 +24,7 @@ class Alert2Overview extends LitElement {
     constructor() {
         super();
         this._sortedDispInfos = [];
+        this._alert2StatesMap = {}; // map entity_id -> state object
         this._updateTimer = null;
         this._cardHelpers = null;
         this._ackAllInProgress = false;
@@ -37,9 +40,12 @@ class Alert2Overview extends LitElement {
         ]
         window.loadCardHelpers().then(hs => { this._cardHelpers = hs; });
         this._hass = null;
+        // Purpose of this timer is to throttle jrefresh calls
         this._updateCooldown =  { timer: undefined, rerun: false };
-        //this._updateIntervalMs = 60000;
         this._sliderVal = 3;// 4 hours
+        // Check for entities aging out of window 6 times each selected interval.
+        // e.g., 6 times ever 4 hours
+        this._updateIntervalFactor = 6; 
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -51,20 +57,21 @@ class Alert2Overview extends LitElement {
         }
         if (this._updateCooldown.timer) {
             this._updateCooldown.rerun = true;
+            console.log('set hass called, waiting for timer');
             return;
         } else {
+            console.log('set hass called, doing lightRefresh');
             this._updateCooldown.rerun = false;
             this._updateCooldown.timer = window.setTimeout(() => {
                 this._updateCooldown.timer = undefined;
-                if (this._updateCooldown.rerun) this.jrefresh();
+                if (this._updateCooldown.rerun) { queueMicrotask(()=> { this.jrefresh(false); }); }
             }, 1000);
-            this.jrefresh();
+            queueMicrotask(()=> { this.jrefresh(false); });
         }
     }
     connectedCallback() {
         super.connectedCallback();
         this.restartUpdateTimer();
-        this._updateTimer = setInterval(func, this._updateIntervalMs);
     }
     disconnectedCallback() {
         super.disconnectedCallback();
@@ -77,21 +84,22 @@ class Alert2Overview extends LitElement {
     // Slider changed value
     slideCh(ev) {
         let val = this.shadowRoot.querySelector("ha-slider").value;
-        this._sliderVal = val;
+        if (val >= 0 && val < this._sliderValArr.length) {
+            this._sliderVal = val;
+        } else {
+            console.error('slider value out of bounds:', val);
+        }
         this.restartUpdateTimer();
-        this.jrefresh();
+        this.jrefresh(true);
     }
-    updateIntervalTimer() {
+    restartUpdateTimer() {
         if (this._updateTimer) {
             clearInterval(this._updateTimer);
         }
-        // I think min() is just to protect against out of bounds error or something
-        let intMs = this._sliderValArr[this._sliderVal].secs * 1000 / 10;
-        let outerThis = this;
+        let intMs = this._sliderValArr[this._sliderVal].secs * 1000 / this._updateIntervalFactor;
         // The purpose of this interval timer is to remove from display old alerts that fall outside
         // the displayed time window.
-        let func = function() { outerThis.jrefresh(); }
-        this._updateTimer = setInterval(func, intMs);
+        this._updateTimer = setInterval(()=> { this.jrefresh(true); }, intMs);
     }
     // Ack all button was pressed
     async _ackAll(ev) {
@@ -288,12 +296,41 @@ class Alert2Overview extends LitElement {
     `;
 
     // Returns true if changed list of entities.
-    jrefresh() {
-        //console.log('calling jrefresh');
+    jrefresh(forceBigRefresh) {
+        console.log('doing jrefresh', forceBigRefresh);
         if (!this._hass) {
             console.log('skipping jrefresh cuz no hass');
             return false;
         }
+        
+        if (forceBigRefresh) {
+            // doing periodic check for aged out entities, gotta take slow path
+        } else {
+            // called as result of calls to set hass.
+            // So just gotta check if states has changed
+            for (let entityName in this._hass.states) {
+                if (entityName.startsWith('alert2.')) {
+                    if (!(entityName in this._alert2StatesMap) ||
+                        (this._hass.states[entityName] !== this._alert2StatesMap[entityName])) {
+                        console.log('   will force cuz', entityName);
+                        forceBigRefresh = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!forceBigRefresh) {
+            console.log('   skipping big refresh');
+            return;
+        }
+
+        this._alert2StatesMap = {};
+        for (let entityName in this._hass.states) {
+            if (entityName.startsWith('alert2.')) {
+                this._alert2StatesMap[entityName] = this._hass.states[entityName];
+            }
+        }
+        
         const intervalSecs = this._sliderValArr[this._sliderVal].secs;
         //console.log('intervalSecs as hours', intervalSecs / 60 / 60);
         const nowMs = Date.now();
@@ -368,27 +405,31 @@ class Alert2Overview extends LitElement {
                 return b.testMs - a.testMs;
             }
         }
+        let doUpdate = false;
         let sortedDispInfos = entDispInfos.sort(sortFunc);
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
-            this._sortedDispInfos = sortedDispInfos;
-            return true;
+            doUpdate = true;
         } else {
             for (let idx = 0 ; idx < sortedDispInfos.length; idx ++) {
                 let olde = this._sortedDispInfos[idx];
                 let newe = sortedDispInfos[idx];
                 if (newe.entityName !== olde.entityName) {
-                    this._sortedDispInfos = sortedDispInfos;
-                    return true;
+                    doUpdate = true;
+                    break;
                 }
                 if (newe.isOn != olde.isOn ||
                     newe.isAcked != olde.isAcked ||
                     newe.testMs != newe.testMs) {
-                    this._sortedDispInfos = sortedDispInfos;
-                    return true;
+                    doUpdate = true;
+                    break;
                 }
             }
         }
-        return false;
+        if (doUpdate) {
+            // Will trigger rerender
+            this._sortedDispInfos = sortedDispInfos;
+        }
+        return doUpdate;
     }
 }
 
@@ -463,7 +504,7 @@ class Alert2EntityRow extends LitElement  {
         display: flex;
         flex-flow: row wrap;
         align-items: center;
-        justify-content: space-between;
+        /*justify-content: space-between;*//* not needed now that we use margin-left: auto */
       }
       .outhead, .astate {
        /* note max-content I think ignores flex basis.
@@ -477,6 +518,7 @@ class Alert2EntityRow extends LitElement  {
         min-width: 7em; 
       }
       .astate {
+        margin-left: auto; /* so if it wraps it is right justified */
         flex: 0 0 auto;
       }
       .awrapper {

@@ -158,7 +158,7 @@
              if (withAO) {
                  let ao = document.createElement('alert2-overview');
                  ao.hass = newHass;
-                 ao._updateIntervalMs = 50;
+                 ao._updateIntervalFactor = (4*60*60*1000) * (1000 / 50); // so updates every 50ms
                  testDiv.appendChild(ao);
                  await sleepMs(5);
                  await afunc(ao, newHass);
@@ -215,7 +215,7 @@
              ao.hass = newHass;
              await sleepMs(10);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
-             jassert(tEls.length == 3);
+             jasserteq(tEls.length, 3);
              jassert(tEls[2].shadowRoot.innerHTML.includes('alert2.foo3'));
              // And then if we wait a bit, alert will age out of window interval
              await sleepMs(150);
@@ -240,6 +240,8 @@
              jassert(tEls[2].shadowRoot.innerHTML.includes('alert2.foo6'));
              //jassert(ao.shadowRoot.querySelector('div#nounacks') == null);
              jassert(ao.shadowRoot.querySelector('div#ackbar') == null);
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar + div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
 
              // Add in alerts that are off and unacked. They should be after the on ones.
              newHass = cloneHass(newHass);
@@ -259,15 +261,17 @@
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
              //jassert(ao.shadowRoot.querySelector('div#nounacks') == null);
              jassert(ao.shadowRoot.querySelector('div#ackbar') == null);
-
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar + div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
+             
              // Add in some on alerts that are acked and on
              newHass = cloneHass(newHass);
              newHass.states['alert2.foo10'] = createState('foo10', 990, 2000, 500);
              newHass.states['alert2.foo11'] = createState('foo11', 950, 2000, 500);
              newHass.states['alert2.foo12'] = createState('foo12', 970, 2000, 500);
-             newHass.states['sensor.alert2_change_count'] = { state: '80' };
+             //newHass.states['sensor.alert2_change_count'] = { state: '80' };
              ao.hass = newHass;
-             await sleepMs(10);
+             await sleepMs(60);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jassert(tEls.length == 9);
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo5'));
@@ -282,6 +286,8 @@
              //jassert(ao.shadowRoot.querySelector('div#nounacks') == null);
              let ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 3);
 
              // Add in some on alerts that are acked and off
              newHass = cloneHass(newHass);
@@ -308,37 +314,46 @@
              //jassert(ao.shadowRoot.querySelector('div#nounacks') == null);
              ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 6);
 
              // For grins, let's try setting an alert to ack
              // First make sure that refreshing hass doesn't change anything by itself
              newHass = cloneHass(newHass);
              ao.hass = newHass;
-             newHass.states['sensor.alert2_change_count'] = { state: '79' };
-             await sleepMs(10);
+             //newHass.states['sensor.alert2_change_count'] = { state: '79' };
+             await sleepMs(60);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jassert(tEls.length == 12);
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             console.log(tEls);
+             jasserteq(tEls.length, 6);
              // Now try with ack time set, that should bump foo7 below ackbar
              newHass = cloneHass(newHass);
              newHass.states['alert2.foo7'] = createState('foo7', 1905, 1895, 10);
-             newHass.states['sensor.alert2_change_count'] = { state: '79' };
+             //newHass.states['sensor.alert2_change_count'] = { state: '79' };
              //newHass.states['alert2.foo7'].attributes['last_ack_time'] = getRecentIso(10);
              ao.hass = newHass;
-             await sleepMs(10);
+             await sleepMs(60);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jassert(tEls.length == 12);
              jassert(!tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
              jassert(tEls[11].shadowRoot.innerHTML.includes('alert2.foo7'));
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 7);
              // And then unack should bring it back up
              newHass = cloneHass(newHass);
-             newHass.states['alert2.foo7'] = createState('foo7', 905, 895, 10);
+             newHass.states['alert2.foo7'] = createState('foo7', 1905, 1895, 10);
              newHass.states['alert2.foo7'].attributes['last_ack_time'] = null;
              newHass.states['sensor.alert2_change_count'] = { state: '79' };
              ao.hass = newHass;
-             await sleepMs(10);
+             await sleepMs(60);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jassert(tEls.length == 12);
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             jasserteq(tEls.length, 6);
          }
          async function doTest3(ao, newHass) {
              let tEls;
@@ -510,7 +525,6 @@
              newHass.states['alert2.foo39'] = createState('foo39', 5000, 6000, 10000); // on
              newHass.states['sensor.alert2_change_count'] = { state: '79' };
              ao.hass = newHass;
-             //ao._updateIntervalMs = 50000;
              let testDiv = document.querySelector('#testDiv');
              testDiv.appendChild(ao);
              await sleepMs(5);
