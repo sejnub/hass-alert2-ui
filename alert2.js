@@ -35,11 +35,11 @@ class Alert2Overview extends LitElement {
             { str: '4 days', secs: 4*24*60*60 },
             { str: '2 weeks', secs: 2*7*24*60*60 }
         ]
-        this._sliderVal = 3;// 4 hours
         window.loadCardHelpers().then(hs => { this._cardHelpers = hs; });
         this._hass = null;
-        this._updateTimer = null;
-        this._updateIntervalMs = 60000;
+        this._updateCooldown =  { timer: undefined, rerun: false };
+        //this._updateIntervalMs = 60000;
+        this._sliderVal = 3;// 4 hours
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -49,39 +49,21 @@ class Alert2Overview extends LitElement {
                 elem.hass = this._hass;
             });
         }
-
-        if (oldHass) {
-            // sensor.alert2_change_count is unecessary as long as we do jrefresh on every alert2 domain change.
-            if (1) {
-                // sensor.alert2_change_count is a performance optimization so we can limit how
-                // often we have to scan for new entities to include in the recent alert list.
-                // It changes each time any alert fires.
-                const entityId = 'sensor.alert2_change_count';
-                if (!newHass || (oldHass.states[entityId] !== newHass.states[entityId])) {
-                    this.jrefresh();
-                }
-            } else {
-                for (let entityName in newHass.states) {
-                    if (entityName.startsWith('alert2.')) {
-                        if (!(entityName in oldHass.states) ||
-                            (newHass.states[entityName] !== oldHass.states[entityName])) {
-                            this.jrefresh();
-                            return;
-                        }
-                    }
-                }
-            }
+        if (this._updateCooldown.timer) {
+            this._updateCooldown.rerun = true;
+            return;
         } else {
-            // Probably is first rendering
+            this._updateCooldown.rerun = false;
+            this._updateCooldown.timer = window.setTimeout(() => {
+                this._updateCooldown.timer = undefined;
+                if (this._updateCooldown.rerun) this.jrefresh();
+            }, 1000);
             this.jrefresh();
         }
     }
     connectedCallback() {
         super.connectedCallback();
-        let outerThis = this;
-        // The purpose of this interval timer is to remove from display old alerts that fall outside
-        // the displayed time window.
-        let func = function() { outerThis.jrefresh(); }
+        this.restartUpdateTimer();
         this._updateTimer = setInterval(func, this._updateIntervalMs);
     }
     disconnectedCallback() {
@@ -96,7 +78,20 @@ class Alert2Overview extends LitElement {
     slideCh(ev) {
         let val = this.shadowRoot.querySelector("ha-slider").value;
         this._sliderVal = val;
+        this.restartUpdateTimer();
         this.jrefresh();
+    }
+    updateIntervalTimer() {
+        if (this._updateTimer) {
+            clearInterval(this._updateTimer);
+        }
+        // I think min() is just to protect against out of bounds error or something
+        let intMs = this._sliderValArr[this._sliderVal].secs * 1000 / 10;
+        let outerThis = this;
+        // The purpose of this interval timer is to remove from display old alerts that fall outside
+        // the displayed time window.
+        let func = function() { outerThis.jrefresh(); }
+        this._updateTimer = setInterval(func, intMs);
     }
     // Ack all button was pressed
     async _ackAll(ev) {
