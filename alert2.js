@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.2  (internal 43)';
+const VERSION = 'v1.5.3  (internal 44)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -24,7 +24,6 @@ class Alert2Overview extends LitElement {
     constructor() {
         super();
         this._sortedDispInfos = [];
-        this._alert2StatesMap = {}; // map entity_id -> state object
         this._updateTimer = null;
         this._cardHelpers = null;
         this._ackAllInProgress = false;
@@ -40,10 +39,21 @@ class Alert2Overview extends LitElement {
         ]
         window.loadCardHelpers().then(hs => { this._cardHelpers = hs; });
         this._hass = null;
-        // Purpose of this timer is to throttle jrefresh calls
+        // The only indication we get of state changes is hass updating.
+        // To prevent scanning through all entitites in hass on each update,
+        // we do two optimizations.
+        // 1. We throttle scans to at most once per _updateCooldownMs.
+        // 2. We keep _alert2StatesMap, a map of the state objects of all alert/alert2
+        //    entities. So when we do a scan in jrefresh(), we first do a check to see if any
+        //    alert2 entities changed.  If any changed, then we do the heavier
+        //    look through entities and check dates/times.
+        //
+        this._alert2StatesMap = new Map(); // map entity_id -> state object
         this._updateCooldown =  { timer: undefined, rerun: false };
+        this._updateCooldownMs = 1000;
+        
         this._sliderVal = 3;// 4 hours
-        // Check for entities aging out of window 6 times each selected interval.
+        // Check for entities aging out of UI window 6 times each selected interval.
         // e.g., 6 times ever 4 hours
         this._updateIntervalFactor = 6; 
     }
@@ -57,15 +67,15 @@ class Alert2Overview extends LitElement {
         }
         if (this._updateCooldown.timer) {
             this._updateCooldown.rerun = true;
-            console.log('set hass called, waiting for timer');
+            //console.log('set hass - deferring');
             return;
         } else {
-            console.log('set hass called, doing lightRefresh');
+            //console.log('set hass - doing lightRefresh', this._updateCooldownMs);
             this._updateCooldown.rerun = false;
             this._updateCooldown.timer = window.setTimeout(() => {
                 this._updateCooldown.timer = undefined;
                 if (this._updateCooldown.rerun) { queueMicrotask(()=> { this.jrefresh(false); }); }
-            }, 1000);
+            }, this._updateCooldownMs);
             queueMicrotask(()=> { this.jrefresh(false); });
         }
     }
@@ -77,6 +87,10 @@ class Alert2Overview extends LitElement {
         super.disconnectedCallback();
         clearInterval(this._updateTimer);
         this._updateTimer = null;
+        if (this._updateCooldown.timer) {
+            window.clearTimeout(this._updateCooldown.timer);
+            this._updateCooldown.timer = undefined;
+        }
     }
     setConfig(config) {
         this._config = config;
@@ -297,9 +311,9 @@ class Alert2Overview extends LitElement {
 
     // Returns true if changed list of entities.
     jrefresh(forceBigRefresh) {
-        console.log('doing jrefresh', forceBigRefresh);
+        //console.log('doing jrefresh', forceBigRefresh);
         if (!this._hass) {
-            console.log('skipping jrefresh cuz no hass');
+            console.log('  skipping jrefresh cuz no hass');
             return false;
         }
         
@@ -308,26 +322,36 @@ class Alert2Overview extends LitElement {
         } else {
             // called as result of calls to set hass.
             // So just gotta check if states has changed
+            let existingCount = 0;
             for (let entityName in this._hass.states) {
-                if (entityName.startsWith('alert2.')) {
-                    if (!(entityName in this._alert2StatesMap) ||
-                        (this._hass.states[entityName] !== this._alert2StatesMap[entityName])) {
-                        console.log('   will force cuz', entityName);
+                if (entityName.startsWith('alert.') ||
+                    entityName.startsWith('alert2.')) {
+                    if (this._alert2StatesMap.has(entityName)) {
+                        existingCount += 1;
+                        if (this._hass.states[entityName] !== this._alert2StatesMap.get(entityName)) {
+                            //console.log('  will force cuz', entityName);
+                            forceBigRefresh = true;
+                        }
+                    } else {
+                        // New entity appeared
                         forceBigRefresh = true;
-                        break;
                     }
                 }
             }
+            if (this._alert2StatesMap.size > existingCount) {
+                // Some entity has been deleted
+                forceBigRefresh = true;
+            }
         }
         if (!forceBigRefresh) {
-            console.log('   skipping big refresh');
             return;
         }
 
-        this._alert2StatesMap = {};
+        this._alert2StatesMap.clear();
         for (let entityName in this._hass.states) {
-            if (entityName.startsWith('alert2.')) {
-                this._alert2StatesMap[entityName] = this._hass.states[entityName];
+            if (entityName.startsWith('alert.') ||
+                entityName.startsWith('alert2.')) {
+                this._alert2StatesMap.set(entityName, this._hass.states[entityName]);
             }
         }
         
