@@ -145,7 +145,9 @@ The second "Previous Firings" section lists each firing over the previous 24 hou
 
 The "Notifications" section lets you snooze or disable notifications. Select an option and click "Update".  The "Status" line will update dynamically.
 
-Snoozing an alert implicitly ack's it and prevent notifications during the snooze interval.  When the interval ends you can opt to get a summary notification of any alert activity during the period. See `summary_notifier` in the [Alert2](https://github.com/redstone99/hass-alert2) docs.
+Snoozing an alert implicitly acks it once and prevents notifications during the snooze interval.  When the interval ends you can opt to get a summary notification of any alert activity during the period. See `summary_notifier` in the [Alert2](https://github.com/redstone99/hass-alert2) docs.
+
+Times are displayed in the browser local time zone.
 
 ### Other ways to view alerts
 
