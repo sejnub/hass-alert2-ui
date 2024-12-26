@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.3  (internal 44)';
+const VERSION = 'v1.5.3  (internal 45)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -575,14 +575,22 @@ class Alert2EntityRow extends LitElement  {
     `;
 }
 
+function formatLogDate(idate) {
+    function z2(num) { return ('0'+num).slice(-2); }
+    function z3(num) { return ('00'+num).slice(-3); }
+    let adate = new Date(Date.parse(idate));
+    // e.g., 2024/12/20 13:05:15.123  (local time)
+    return `${adate.getFullYear()}/${z2(adate.getMonth())}/${z2(adate.getDate())} ${z2(adate.getHours())}:${z2(adate.getMinutes())}:${z2(adate.getSeconds())}.${z3(adate.getMilliseconds())}`
+}
+
 function agoStr(adate, longnames) {
     const secondsAgo = (new Date() - adate) / 1000.0;
     let astr;
     let intervalSecs;
-    if (secondsAgo < 2*60) { astr = `${Math.round(secondsAgo)}${longnames?" seconds":"s"}`; intervalSecs = 1; }
-    else if (secondsAgo < 2*60*60) { astr = `${Math.round(secondsAgo/60)}${longnames?" minutes":"m"}`; intervalSecs = 60; }
-    else if (secondsAgo < 2*24*60*60) { astr = `${Math.round(secondsAgo/(60*60))}${longnames?" hours":"h"}`; intervalSecs = 60*60; }
-    else { astr = `${Math.round(secondsAgo/(24*60*60))}${longnames?" days":"d"}`; intervalSecs = 24*60*60; }
+    if (secondsAgo < 2*60) { astr = `${Math.round(secondsAgo)}${longnames?" seconds":" s"}`; intervalSecs = 1; }
+    else if (secondsAgo < 2*60*60) { astr = `${Math.round(secondsAgo/60)}${longnames?" minutes":" min"}`; intervalSecs = 60; }
+    else if (secondsAgo < 2*24*60*60) { astr = `${Math.round(secondsAgo/(60*60))}${longnames?" hours":" h"}`; intervalSecs = 60*60; }
+    else { astr = `${Math.round(secondsAgo/(24*60*60))}${longnames?" days":" d"}`; intervalSecs = 24*60*60; }
     return { str:`${astr} ago`, secs:intervalSecs };
 }
 
@@ -1000,7 +1008,7 @@ class MoreInfoAlert2 extends LitElement {
         } else if (stateValue == NOTIFICATIONS_DISABLED) {
             notification_status = "disabled";
         } else {
-            notification_status = "snoozed until " + stateValue;
+            notification_status = "snoozed until " + formatLogDate(stateValue);
         }
 
         let is_snoozed = false;
@@ -1034,7 +1042,7 @@ class MoreInfoAlert2 extends LitElement {
                           html`<j-relative-time
                                    .timestamp=${Date.parse(eventTime)} .useLongnames=${true}></j-relative-time>` : 'unknown';
                     const absTime = eventTime ?
-                          html`<span style="font-size:0.8em;">${eventTime}</span>` : 'unknown';
+                          html`<span style="font-size:0.8em;">${formatLogDate(eventTime)}</span>` : 'unknown';
                     return html`
                 <tr class="eventrow">
                 <td class="eventtime">${firedTime}<br/>${absTime}</td>
