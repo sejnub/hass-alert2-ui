@@ -1458,3 +1458,119 @@ class Alert2Tools {
     static get html() { return html; }
 };
 customElements.define('alert2-tools', Alert2Tools);
+
+
+
+//
+// --------------------------------------------------------------------------------
+// Logic for  Alert Manger
+//
+
+class Alert2Manager extends LitElement {
+    static properties = {
+        open: {},
+        large: {reflect: true, type: Boolean},
+        _hass: { state: true },
+        //hass: { attribute: false },
+    }
+    constructor() {
+        super();
+        this._hass = null;
+    }
+    set hass(newHass) {
+        const oldHass = this._hass;
+        this._hass = newHass;
+        this._config = null;
+    }
+    setConfig(config) {
+        this._config = config;
+    }
+    render() {
+        if (!this._hass) {
+            return html`<div>Loading.. waiting for hass to load</div>`;
+        }
+        return html`<ha-card>
+            <h1 class="card-header"><div class="name">Alert2 Manager</div></h1>
+            <div class="card-content">
+              <div style="display:flex; align-items: center; margin-bottom: 1em;">
+                  <ha-progress-button .progress=${this._ackAllInProgress}
+                    @click=${this.createNew}>Create new alert</ha-progress-button>
+              </div>
+            </div>
+          </ha-card>`;
+    }
+    async createNew(ev) {
+        let innerElem = document.createElement('alert2-create');
+        innerElem.hass = this._hass;
+        jCreateDialog(this, 'a new alert?', innerElem);
+    }
+    static styles = css`
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+      }
+      .card-header .name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      .header {
+        border-top-left-radius: var(--ha-card-border-radius, 12px);
+        border-top-right-radius: var(--ha-card-border-radius, 12px);
+        margin-bottom: 16px;
+        overflow: hidden;
+      }
+      .footer {
+        border-bottom-left-radius: var(--ha-card-border-radius, 12px);
+        border-bottom-right-radius: var(--ha-card-border-radius, 12px);
+        margin-top: -16px;
+        overflow: hidden;
+      }
+    `;
+};
+
+class Alert2Create extends LitElement {
+    static properties = {
+        hass: { attribute: false },
+    }
+    constructor() {
+        super();
+    }
+    connectedCallback() {
+        super.connectedCallback();
+    }
+    render() {
+        if (!this.hass) {
+            return "waiting for hass";
+        }
+        return html`
+         <div class="container" >
+           foobar
+         </div>
+         `;
+    }
+    static styles = css`
+    .container {
+        /* padding: 24px; */
+        margin-bottom: 1em;
+     }
+        .title {
+          font-family: var(--paper-font-title_-_font-family);
+          -webkit-font-smoothing: var(
+            --paper-font-title_-_-webkit-font-smoothing
+          );
+          font-size: var(--paper-font-subhead_-_font-size);
+          font-weight: var(--paper-font-title_-_font-weight);
+          letter-spacing: var(--paper-font-title_-_letter-spacing);
+          line-height: var(--paper-font-title_-_line-height);
+        }
+      `;
+
+    _showToast(amsg) {
+        jFireEvent(this, "hass-notification", { message: amsg });
+    }
+}
+
+customElements.define('alert2-manager', Alert2Manager);
+customElements.define('alert2-create', Alert2Create);
