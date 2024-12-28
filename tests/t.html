@@ -513,17 +513,17 @@
                  return rez;
              }
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo33'));
-             jasserteq(reduceAllText(tEls[0].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'on5s ago');
+             jasserteq(reduceAllText(tEls[0].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'on5 s ago');
              jassert(tEls[1].shadowRoot.innerHTML.includes('alert2.foo35'));
-             jasserteq(reduceAllText(tEls[1].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'on5s ago+2x');
+             jasserteq(reduceAllText(tEls[1].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'on5 s ago+2x');
              jassert(tEls[2].shadowRoot.innerHTML.includes('alert2.foo34'));
-             jasserteq(reduceAllText(tEls[2].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'off5s ago');
+             jasserteq(reduceAllText(tEls[2].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'off5 s ago');
              jassert(tEls[3].shadowRoot.innerHTML.includes('alert2.foo36'));
-             jasserteq(reduceAllText(tEls[3].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'off5s ago+4x');
+             jasserteq(reduceAllText(tEls[3].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), 'off5 s ago+4x');
              jassert(tEls[4].shadowRoot.innerHTML.includes('alert2.foo37'));
-             jasserteq(reduceAllText(tEls[4].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), '5s ago');
+             jasserteq(reduceAllText(tEls[4].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), '5 s ago');
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo38'));
-             jasserteq(reduceAllText(tEls[5].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), '6s ago+5x');
+             jasserteq(reduceAllText(tEls[5].shadowRoot.querySelector('ha-alert2-state').shadowRoot.querySelectorAll('div.onerow')[1]), '6 s ago+5x');
          }
          async function doTest7(ao, newHass) {
              // And check a few variations of alarms in a state when HA first starts.
