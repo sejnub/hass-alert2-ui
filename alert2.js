@@ -1558,31 +1558,35 @@ class Alert2Create extends LitElement {
         if (!this.hass) {
             return "waiting for hass";
         }
+        let foo = html`<div class="subtext">happy</div>`;
         return html`
          <div class="container" >
-           foobar
+            <div><ha-formfield .label=${"Condition - for conds"}>
+                  <ha-radio .checked=${false} .value=${"cond"}
+                      .disabled=${false} @change=${this._catChanged}
+                      ></ha-radio><div class="subtext">happy</div></ha-formfield></div>
+            <div><ha-formfield .label=${"Event - for evs"}>
+                  <ha-radio .checked=${false} .value=${"event"}
+                      .disabled=${false} @change=${this._catChanged}
+                      ></ha-radio></ha-formfield></div>
+            <div><ha-formfield .label=${"Generator"}>
+                  <ha-radio .checked=${false} .value=${"gen"}
+                      .disabled=${false} @change=${this._catChanged}
+                      ></ha-radio></ha-formfield></div>
          </div>
          `;
     }
     static styles = css`
     .container {
-        /* padding: 24px; */
         margin-bottom: 1em;
      }
-        .title {
-          font-family: var(--paper-font-title_-_font-family);
-          -webkit-font-smoothing: var(
-            --paper-font-title_-_-webkit-font-smoothing
-          );
-          font-size: var(--paper-font-subhead_-_font-size);
-          font-weight: var(--paper-font-title_-_font-weight);
-          letter-spacing: var(--paper-font-title_-_letter-spacing);
-          line-height: var(--paper-font-title_-_line-height);
-        }
+     .subtext {
+        font-size: 0.6em;
+      }
       `;
-
-    _showToast(amsg) {
-        jFireEvent(this, "hass-notification", { message: amsg });
+    _catChanged(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        console.log('radio clicked', value);
     }
 }
 

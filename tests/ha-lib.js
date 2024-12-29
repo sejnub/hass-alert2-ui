@@ -1,4 +1,5 @@
          import {LitElement, html, css} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+         //import { classMap } from "https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit/directives/class-map";
          import { FormfieldBase }           from "@material/mwc-formfield/mwc-formfield-base";
          import { styles as formStyles }    from "@material/mwc-formfield/mwc-formfield.css";
          import                                  "@material/mwc-button";
@@ -247,7 +248,7 @@
                      "mdc-form-field--align-end": this.alignEnd,
                      "mdc-form-field--space-between": this.spaceBetween,
                      "mdc-form-field--nowrap": this.nowrap,
-                 };
+                 }; // not used.  used to be added as classes if val was truthy
                  
                  return html` <div class="mdc-form-field">
       <slot></slot>
@@ -569,3 +570,16 @@
     window.LitElement = LitElement;
     window.LitElement.prototype.html = html;
     window.LitElement.prototype.css = css;
+
+function fireEvent(node, type, detail=null, options={}) {
+  options = options || {};
+    detail = detail === null || detail === undefined ? {} : detail;
+    const event = new Event(type, {
+        bubbles: options.bubbles === undefined ? true : options.bubbles,
+        cancelable: Boolean(options.cancelable),
+        composed: options.composed === undefined ? true : options.composed,
+    });
+    event.detail = detail;
+    node.dispatchEvent(event);
+    return event;
+}

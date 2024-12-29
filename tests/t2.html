@@ -1,6 +1,6 @@
 <html>
     <!-- python3 -m http.server 8000 -d ..
-         then load http://localhost:8000/tests/t.html
+         then load http://localhost:8000/tests/t2.html
     -->
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -100,7 +100,7 @@
          window.addEventListener('DOMContentLoaded', async function() {
              await loadScript('./ha-lib.js', 'module');
              await loadScript('../alert2.js');
-             await startTest(doTest);
+             await startTest(doTest, isEdit=true);
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -141,14 +141,14 @@
                                     'fires_since_last_notify': 0 },
                       entity_id: 'alert2.'+name };
          }
-         async function startTest(afunc) {
+         async function startTest(afunc, isEdit=false) {
              let testStatusEl = document.querySelector('#testStatus');
              let testDiv = document.querySelector('#testDiv');
              testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
              };
-             let ao = document.createElement('alert2-manager');
+             let ao = document.createElement(isEdit ? 'alert2-create' :  'alert2-manager');
              ao.hass = newHass;
              testDiv.appendChild(ao);
              await sleepMs(5);
