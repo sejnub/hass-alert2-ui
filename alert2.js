@@ -1497,6 +1497,20 @@ class Alert2Manager extends LitElement {
                     @click=${this.createNew}>Create new alert</ha-progress-button>
               </div>
             </div>
+            <div><ha-formfield .label=${"Disable"}><ha-radio
+                  .checked=${false}
+                  .value=${"foobar"}
+                  @change=${this._valueChanged}
+                  ></ha-radio></ha-formfield></div>
+            <ha-md-list-item interactive type="button" md-list-item>
+                <div slot="headline">Condition</div>
+                <div slot="supporting-text">cond alert info</div>
+                <div slot="start"><ha-radio
+                  .checked=${false}
+                  .value=${"foobar"}
+                  @change=${this._valueChanged}
+                  ></ha-radio></div>
+            </ha-md-list-item>
           </ha-card>`;
     }
     async createNew(ev) {

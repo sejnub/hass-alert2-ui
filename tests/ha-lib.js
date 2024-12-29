@@ -1,13 +1,15 @@
          import {LitElement, html, css} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
-         import { FormfieldBase } from "@material/mwc-formfield/mwc-formfield-base";
-         import { MdSlider } from "@material/web/slider/slider";
-         import { mdiAlertOctagram, mdiCheckBold } from "@mdi/js";
-         import { styles as formStyles } from "@material/mwc-formfield/mwc-formfield.css";
-         import "@material/mwc-button";
-         import { RadioBase } from "@material/mwc-radio/mwc-radio-base";
-         import { styles as radioStyles } from "@material/mwc-radio/mwc-radio.css";
-         import { TextFieldBase } from "@material/mwc-textfield/mwc-textfield-base";
-         import { styles as textfieldStyles } from "@material/mwc-textfield/mwc-textfield.css";
+         import { FormfieldBase }           from "@material/mwc-formfield/mwc-formfield-base";
+         import { styles as formStyles }    from "@material/mwc-formfield/mwc-formfield.css";
+         import                                  "@material/mwc-button";
+         import { RadioBase }               from "@material/mwc-radio/mwc-radio-base";
+         import { styles as radioStyles }   from "@material/mwc-radio/mwc-radio.css";
+         import { TextFieldBase }           from "@material/mwc-textfield/mwc-textfield-base";
+         import {styles as textfieldStyles} from "@material/mwc-textfield/mwc-textfield.css";
+         import { MdListItem, MdSlider } from '@material/web/all.js';
+         //import { MdListItem }         from "@material/web/list/list-item";
+         //import { MdSlider }           from "@material/web/slider/slider";
+         //import { mdiAlertOctagram, mdiCheckBold } from "@mdi/js";
          class HaSlider extends MdSlider {
              static styles = [
                  ...super.styles,
@@ -247,7 +249,7 @@
                      "mdc-form-field--nowrap": this.nowrap,
                  };
                  
-                 return html` <div class="mdc-form-field ${classMap(classes)}">
+                 return html` <div class="mdc-form-field">
       <slot></slot>
       <label class="mdc-label" @click=${this._labelClick}>
         <slot name="label">${this.label}</slot>
@@ -535,8 +537,28 @@
             return html`<div style="width: 20px; height: 20px; border: 1px solid green;">!</div>`;
         }
     };
+    class HaMdListItem extends MdListItem {
+      static styles = [
+          super.styles,
+        css`
+          :host {
+            --ha-icon-display: block;
+            --md-sys-color-primary: var(--primary-text-color);
+            --md-sys-color-secondary: var(--secondary-text-color);
+            --md-sys-color-surface: var(--card-background-color);
+            --md-sys-color-on-surface: var(--primary-text-color);
+            --md-sys-color-on-surface-variant: var(--secondary-text-color);
+          }
+          md-item {
+            overflow: var(--md-item-overflow, hidden);
+          }
+        `,
+      ];
+    }
+
     customElements.define('state-badge', StateBadge);
     customElements.define('ha-panel-lovelace', HaPanelLovelace);
+    customElements.define('ha-md-list-item', HaMdListItem);
 
          customElements.define('ha-slider', HaSlider);
          customElements.define('ha-card', HaCard);
