@@ -1497,20 +1497,6 @@ class Alert2Manager extends LitElement {
                     @click=${this.createNew}>Create new alert</ha-progress-button>
               </div>
             </div>
-            <div><ha-formfield .label=${"Disable"}><ha-radio
-                  .checked=${false}
-                  .value=${"foobar"}
-                  @change=${this._valueChanged}
-                  ></ha-radio></ha-formfield></div>
-            <ha-md-list-item interactive type="button" md-list-item>
-                <div slot="headline">Condition</div>
-                <div slot="supporting-text">cond alert info</div>
-                <div slot="start"><ha-radio
-                  .checked=${false}
-                  .value=${"foobar"}
-                  @change=${this._valueChanged}
-                  ></ha-radio></div>
-            </ha-md-list-item>
           </ha-card>`;
     }
     async createNew(ev) {
@@ -1544,49 +1530,132 @@ class Alert2Manager extends LitElement {
     `;
 };
 
+function makeEnum(obj) {
+    return new Proxy(obj, { get(target, name) { if (obj[name]) { return obj[name] } else { throw new Error(`field ${name} not in obj`); } } });
+}
+const debounce = (callback, wait) => {
+  let timeoutId = null;
+  return (...args) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => {
+      callback(...args);
+    }, wait);
+  };
+}
+let TopTypes = makeEnum({ COND:  'cond', EVENT:  "event", GENERATOR: "generator" });
+//const RpcState = Object.freeze({ NONE:  'none', IN_PROGRESS:  "in_progress", GENERATOR: "generator" });
 class Alert2Create extends LitElement {
     static properties = {
         hass: { attribute: false },
+        topType: { state: true },
+        domain: { state: true },
+        name: { state: true },
+        conditionTxt: { state: true },
+        conditionEval: { state: true },
     }
     constructor() {
         super();
+        this.topType = TopTypes.COND;
+        this.domain = null;
+        this.name = null;
+        this.conditionTxt = '';
+        this.conditionEvalD = debounce(this.doConditionEval.bind(this), 750);
+        this.conditionEval = { rendering: false, error: null, result: null };
+        //this._yaml = '';
     }
     connectedCallback() {
         super.connectedCallback();
+    }
+    configToYaml() {
+        let yaml = 'alert2:';
+        yaml += '\n  alerts:';
+        if (this.domain) { yaml += '\n    - domain: ' + this.domain; }
+        if (this.name) { yaml += '\n      name: ' + this.name; }
+        return yaml;
     }
     render() {
         if (!this.hass) {
             return "waiting for hass";
         }
         let foo = html`<div class="subtext">happy</div>`;
+        let entName = `alert2.${this.domain ? this.domain : "[domain]"}_${this.name ? this.name : "[name]"}`;
+        let yaml = this.configToYaml();
         return html`
          <div class="container" >
-            <div><ha-formfield .label=${"Condition - for conds"}>
-                  <ha-radio .checked=${false} .value=${"cond"}
-                      .disabled=${false} @change=${this._catChanged}
-                      ></ha-radio><div class="subtext">happy</div></ha-formfield></div>
-            <div><ha-formfield .label=${"Event - for evs"}>
-                  <ha-radio .checked=${false} .value=${"event"}
-                      .disabled=${false} @change=${this._catChanged}
-                      ></ha-radio></ha-formfield></div>
-            <div><ha-formfield .label=${"Generator"}>
-                  <ha-radio .checked=${false} .value=${"gen"}
-                      .disabled=${false} @change=${this._catChanged}
-                      ></ha-radio></ha-formfield></div>
+            <ha-md-list-item interactive type="button" md-list-item @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+                <div slot="headline">Condition</div>
+                <div slot="supporting-text">Fires while a condition is satisfied</div>
+                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
+                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
+            <ha-md-list-item interactive type="button" md-list-item  @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
+                <div slot="headline">Event</div>
+                <div slot="supporting-text">Fires when triggered</div>
+                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
+                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
+            <ha-md-list-item interactive type="button" md-list-item  @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
+                <div slot="headline">Generator</div>
+                <div slot="supporting-text">Use patterns to generate multiple alert entities</div>
+                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
+                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
+            <ha-textfield label="Domain" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._domainChange}></ha-textfield>
+            <ha-textfield label="Name" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._nameChange}></ha-textfield>
+            <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
+                  autofocus autocomplete-entities autocomplete-icons @value-changed=${this._conditionChange} dir="ltr"
+                  linewrap></ha-code-editor>           
+            <div>
+              <p>Render result</p>
+              ${this.conditionEval.rendering ? html`<ha-circular-progress class="render-spinner"
+                    indeterminate size="small" ></ha-circular-progress>` : ""}
+              ${this.conditionEval.error ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
+                     </ha-alert>` : ""}
+               ${this.conditionEval.result ? html`<pre class="rendered">
+                     ${this.conditionEval.result}</pre>`:""}
+            </div>
+
+            <h3>Output</h1>
+            <div>Entity name would be: <code>${entName}</code></div>
+            <div>YAML:</div>
+            <pre class="output">${yaml}</pre>
          </div>
          `;
     }
+    
     static styles = css`
     .container {
         margin-bottom: 1em;
      }
-     .subtext {
-        font-size: 0.6em;
-      }
+     .output {
+        background-color: var(--secondary-background-color);
+        padding: 8px;
+     }
       `;
-    _catChanged(ev) {
+    _topRadioClick(ev) {
         let value = ev.detail?.value || ev.target.value;
-        console.log('radio clicked', value);
+        //console.log('radio clicked', value);
+    }
+    _topClick(name, ev) {
+        //console.log('top clicked', name, ev, this);
+        this.topType = name;
+    }
+    _domainChange(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this.domain = value;
+    }
+    _nameChange(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this.name = value;
+    }
+    _conditionChange(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this.conditionTxt = value;
+        this.conditionEvalD(); // will call conditionEval in a bit
+    }
+    doConditionEval() {
+        this.conditionEval = { rendering: true, error: null, result: null };
+        console.log('cond eval', this.conditionTxt);
+        this.hass.callApi('POST', 'alert2/condEval', { txt: this.conditionTxt }).then((retv)=>{
+            
+        });
     }
 }
 

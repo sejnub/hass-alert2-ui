@@ -556,10 +556,28 @@
         `,
       ];
     }
-
+    class HaCodeEditor extends LitElement {
+        static properties = {
+            hass: { attribute: false },
+            value: { state: true }
+        }
+        constructor() {
+            super();
+            this.value = null;
+        }
+        render() {
+            return html`<ha-textfield label="foo" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} .value=${this.value} @input=${this._vChange}></ha-textfield>`;
+        }
+        _vChange(ev) {
+            let value = ev.detail?.value || ev.target.value;
+            this.value = value;
+            fireEvent(this, "value-changed", { value: this.value });
+        }
+    }
     customElements.define('state-badge', StateBadge);
     customElements.define('ha-panel-lovelace', HaPanelLovelace);
     customElements.define('ha-md-list-item', HaMdListItem);
+    customElements.define('ha-code-editor', HaCodeEditor);
 
          customElements.define('ha-slider', HaSlider);
          customElements.define('ha-card', HaCard);
