@@ -1556,12 +1556,14 @@ class Alert2Create extends LitElement {
     constructor() {
         super();
         this.topType = TopTypes.COND;
-        this.domain = null;
-        this.name = null;
+        this.alertCfg = {};
         this.conditionTxt = '';
         this.conditionEvalD = debounce(this.doConditionEval.bind(this), 750);
         this.conditionEval = { rendering: false, error: null, result: null };
         //this._yaml = '';
+    }
+    setConfig(config) {
+        this._cardConfig = config;
     }
     connectedCallback() {
         super.connectedCallback();
@@ -1569,8 +1571,8 @@ class Alert2Create extends LitElement {
     configToYaml() {
         let yaml = 'alert2:';
         yaml += '\n  alerts:';
-        if (this.domain) { yaml += '\n    - domain: ' + this.domain; }
-        if (this.name) { yaml += '\n      name: ' + this.name; }
+        if (this.alertCfg.domain) { yaml += '\n    - domain: ' + this.alertCfg.domain; }
+        if (this.alertCfg.name) { yaml += '\n      name: ' + this.alertCfg.name; }
         return yaml;
     }
     render() {
@@ -1578,38 +1580,43 @@ class Alert2Create extends LitElement {
             return "waiting for hass";
         }
         let foo = html`<div class="subtext">happy</div>`;
-        let entName = `alert2.${this.domain ? this.domain : "[domain]"}_${this.name ? this.name : "[name]"}`;
+        let entName = `alert2.${this.alertCfg.domain ? this.alertCfg.domain : "[domain]"}_${this.alertCfg.name ? this.alertCfg.name : "[name]"}`;
         let yaml = this.configToYaml();
+        let mdown = html`this is <b>good2</b><ul><li>list1<li>list2</ul>`;
         return html`
          <div class="container" >
-            <ha-md-list-item interactive type="button" md-list-item @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
-                <div slot="headline">Condition</div>
-                <div slot="supporting-text">Fires while a condition is satisfied</div>
-                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
-                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
-            <ha-md-list-item interactive type="button" md-list-item  @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
-                <div slot="headline">Event</div>
-                <div slot="supporting-text">Fires when triggered</div>
-                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
-                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
-            <ha-md-list-item interactive type="button" md-list-item  @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
-                <div slot="headline">Generator</div>
-                <div slot="supporting-text">Use patterns to generate multiple alert entities</div>
-                <div slot="start"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
-                  @change=${this._topRadioClick} ></ha-radio></div></ha-md-list-item>
+            <ha-list>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+                  <span>Condition</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Fires while a condition is satisfied</span></ha-list-item>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+                  <span>Event</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.COND}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Fires when triggered</span></ha-list-item>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+                  <span>Generator</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.COND}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Use patterns to generate multiple alert entities</span></ha-list-item>
+            </ha-list>
             <ha-textfield label="Domain" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._domainChange}></ha-textfield>
             <ha-textfield label="Name" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._nameChange}></ha-textfield>
-            <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
+            <div><p>Condition*</p>
+               <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._conditionChange} dir="ltr"
-                  linewrap></ha-code-editor>           
-            <div>
-              <p>Render result</p>
+                  linewrap></ha-code-editor>
+               ${mdown}
+            </div>
+            <div style="display: flex; flex-flow: row; align-items: center;">
               ${this.conditionEval.rendering ? html`<ha-circular-progress class="render-spinner"
-                    indeterminate size="small" ></ha-circular-progress>` : ""}
-              ${this.conditionEval.error ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
-                     </ha-alert>` : ""}
-               ${this.conditionEval.result ? html`<pre class="rendered">
-                     ${this.conditionEval.result}</pre>`:""}
+                    indeterminate size="small" ></ha-circular-progress>` : 
+                (this.conditionEval.error != null ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
+                     </ha-alert>` : 
+                (this.conditionEval.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
+                    <pre class="rendered">${this.conditionEval.result}</pre>`:""))}
             </div>
 
             <h3>Output</h1>
@@ -1639,23 +1646,40 @@ class Alert2Create extends LitElement {
     }
     _domainChange(ev) {
         let value = ev.detail?.value || ev.target.value;
-        this.domain = value;
+        this.alertCfg.domain = value;
     }
     _nameChange(ev) {
         let value = ev.detail?.value || ev.target.value;
-        this.name = value;
+        this.alertCfg.name = value;
     }
     _conditionChange(ev) {
         let value = ev.detail?.value || ev.target.value;
         this.conditionTxt = value;
         this.conditionEvalD(); // will call conditionEval in a bit
     }
-    doConditionEval() {
+    async doConditionEval() {
+        if (!this.conditionTxt) {
+            this.conditionEval = { rendering: false, error: null, result: null };
+            return;
+        }
         this.conditionEval = { rendering: true, error: null, result: null };
         console.log('cond eval', this.conditionTxt);
-        this.hass.callApi('POST', 'alert2/condEval', { txt: this.conditionTxt }).then((retv)=>{
-            
-        });
+        let retv;
+        try {
+            retv = await this.hass.callApi('POST', 'alert2/templateRender',
+                                           { type: 'condition', txt: this.conditionTxt });
+        } catch (err) {
+            this.conditionEval = { rendering: false, error: 'http err: ' + err, result: null };
+            return;
+        }
+        console.log('got render response: ', retv);
+        if (Object.hasOwn(retv, 'error')) {
+            this.conditionEval = { rendering: false, error: retv.error, result: null };
+        } else if (Object.hasOwn(retv, 'rez')) {
+            this.conditionEval = { rendering: false, error: null, result: retv.rez };
+        } else {
+            this.conditionEval = { rendering: false, error: 'bad result: ' + JSON.stringify(retv), result: null };
+        }
     }
 }
 
