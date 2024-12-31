@@ -1582,15 +1582,20 @@ class Alert2CfgField extends LitElement {
             retv = await this.hass.callApi('POST', 'alert2/templateRender',
                                            { type: this.templateType, txt: this.value });
         } catch (err) {
-            this.renderTemplateInfo = { rendering: false, error: 'http err: ' + err, result: null };
+            this.renderTemplateInfo = { rendering: false, error: 'http err: ' + JSON.stringify(err), result: null };
             return;
         }
+        let resp = { rendering: false };
         if (Object.hasOwn(retv, 'error')) {
-            this.renderTemplateInfo = { rendering: false, error: retv.error, result: null };
-        } else if (Object.hasOwn(retv, 'rez')) {
-            this.renderTemplateInfo = { rendering: false, error: null, result: retv.rez };
-        } else {
+            resp.error = retv.error;
+        }
+        if (Object.hasOwn(retv, 'rez')) {
+            resp.result = retv.rez;
+        }
+        if (Object.keys(resp).length == 1) {
             this.renderTemplateInfo = { rendering: false, error: 'bad result: ' + JSON.stringify(retv), result: null };
+        } else {
+            this.renderTemplateInfo = resp;
         }
     }
     setConfig(config) {
@@ -1619,15 +1624,18 @@ class Alert2CfgField extends LitElement {
                 editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
                                        @input=${this._change} @click=${this.editClick}></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
+                let lenStr = '';
+                if (this.templateType == TemplateTypes.LIST && this.renderTemplateInfo.result) {
+                    lenStr = ` (len=${this.renderTemplateInfo.result.length})`;
+                }
                 editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
                   linewrap @click=${this.editClick}></ha-code-editor>`;
-                renderHtml = html`<div style="display: flex; flex-flow: row; align-items: center; margin-left: 1em;">
+                renderHtml = html`<div style="margin-left: 1em;">
                    ${this.renderTemplateInfo.rendering ? html`<ha-circular-progress class="render-spinner"
                        indeterminate size="small" ></ha-circular-progress>` : 
-                   (this.renderTemplateInfo.error != null ? html`<ha-alert alert-type=${"error"}>${this.renderTemplateInfo.error}</ha-alert>` : 
-                   (this.renderTemplateInfo.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
-                    <pre class="rendered">${this.renderTemplateInfo.result}</pre>`:""))}
+                   [(this.renderTemplateInfo.error != null ? html`<ha-alert alert-type=${"error"}>${this.renderTemplateInfo.error}</ha-alert>` : ""),
+                   (this.renderTemplateInfo.result != null ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${''+this.renderTemplateInfo.result}</pre></div>`:"")]}
                </div>`;
                 
             } else {
@@ -1687,7 +1695,7 @@ class Alert2EditDefaults extends LitElement {
         try {
             this._serverDefaults = await this.hass.callApi('POST', 'alert2/loadDefaults', {});
         } catch (err) {
-            this._serverDefaults = { error: 'http err: ' + err };
+            this._serverDefaults = { error: 'http err: ' + JSON.stringify(err) };
             return;
         }
     }
@@ -1881,7 +1889,7 @@ class Alert2Create extends LitElement {
             retv = await this.hass.callApi('POST', 'alert2/templateRender',
                                            { type: 'condition', txt: this.conditionTxt });
         } catch (err) {
-            this.conditionEval = { rendering: false, error: 'http err: ' + err, result: null };
+            this.conditionEval = { rendering: false, error: 'http err: ' + JSON.stringify(err), result: null };
             return;
         }
         console.log('got render response: ', retv);
