@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.3  (internal 45)';
+const VERSION = 'v1.5.3  (internal 46)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -1494,6 +1494,8 @@ class Alert2Manager extends LitElement {
             <div class="card-content">
               <div style="display:flex; align-items: center; margin-bottom: 1em;">
                   <ha-progress-button .progress=${this._ackAllInProgress}
+                    @click=${this.editDefaults}>Edit defaults</ha-progress-button>
+                  <ha-progress-button .progress=${this._ackAllInProgress}
                     @click=${this.createNew}>Create new alert</ha-progress-button>
               </div>
             </div>
@@ -1503,6 +1505,11 @@ class Alert2Manager extends LitElement {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
         jCreateDialog(this, 'a new alert?', innerElem);
+    }
+    async editDefaults(ev) {
+        let innerElem = document.createElement('alert2-edit-defaults');
+        innerElem.hass = this._hass;
+        jCreateDialog(this, 'Edit defaults?', innerElem);
     }
     static styles = css`
       .card-header {
@@ -1543,7 +1550,182 @@ const debounce = (callback, wait) => {
   };
 }
 let TopTypes = makeEnum({ COND:  'cond', EVENT:  "event", GENERATOR: "generator" });
-//const RpcState = Object.freeze({ NONE:  'none', IN_PROGRESS:  "in_progress", GENERATOR: "generator" });
+let FieldTypes = makeEnum({ TEMPLATE: 'template', FLOAT:  "float", STR: "str" });
+let TemplateTypes = makeEnum({ LIST: 'list', CONDITION: 'condition' });
+
+class Alert2CfgField extends LitElement {
+    static properties = {
+        hass: { attribute: false },
+        name: {  },
+        type: {  }, // FieldTypes
+        templateType: {  },
+        value: { attribute: false },
+        required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
+        _expanded: { state: true },
+        renderTemplateInfo: { state: true },
+    }
+    constructor() {
+        super();
+        this._expanded = false;
+        this.required = false; // default
+        this.renderTemplateD = debounce(this.doRenderTemplate.bind(this), 750);
+        this.renderTemplateInfo = { rendering: false, error: null, result: null };
+    }
+    async doRenderTemplate() {
+        if (!this.value) {
+            this.renderTemplateInfo = { rendering: false, error: null, result: null };
+            return;
+        }
+        this.renderTemplateInfo = { rendering: true, error: null, result: null };
+        let retv;
+        try {
+            retv = await this.hass.callApi('POST', 'alert2/templateRender',
+                                           { type: this.templateType, txt: this.value });
+        } catch (err) {
+            this.renderTemplateInfo = { rendering: false, error: 'http err: ' + err, result: null };
+            return;
+        }
+        if (Object.hasOwn(retv, 'error')) {
+            this.renderTemplateInfo = { rendering: false, error: retv.error, result: null };
+        } else if (Object.hasOwn(retv, 'rez')) {
+            this.renderTemplateInfo = { rendering: false, error: null, result: retv.rez };
+        } else {
+            this.renderTemplateInfo = { rendering: false, error: 'bad result: ' + JSON.stringify(retv), result: null };
+        }
+    }
+    setConfig(config) {
+        this._cardConfig = config;
+    }
+    click(ev) {
+        this._expanded = !this._expanded;
+    }
+    editClick(ev) {
+        ev.stopPropagation(); // so doesn't cause expansion
+        //return true;
+    }
+    _change(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this.value = value;
+        jFireEvent(this, "zchange", { value: value });
+        this.renderTemplateD();
+    }
+    render() {
+        //console.log(this.name, this.type, this.value, this.required, this._expanded);
+        if (!this.hass) { return "waiting for hass"; }
+        if (this._expanded) {
+            let editElem;
+            let renderHtml = '';
+            if (this.type == FieldTypes.STR) {
+                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
+                                       @input=${this._change} @click=${this.editClick}></ha-textfield>`;
+            } else if (this.type == FieldTypes.TEMPLATE) {
+                editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.value} .readOnly=${false}
+                  autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
+                  linewrap @click=${this.editClick}></ha-code-editor>`;
+                renderHtml = html`<div style="display: flex; flex-flow: row; align-items: center; margin-left: 1em;">
+                   ${this.renderTemplateInfo.rendering ? html`<ha-circular-progress class="render-spinner"
+                       indeterminate size="small" ></ha-circular-progress>` : 
+                   (this.renderTemplateInfo.error != null ? html`<ha-alert alert-type=${"error"}>${this.renderTemplateInfo.error}</ha-alert>` : 
+                   (this.renderTemplateInfo.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
+                    <pre class="rendered">${this.renderTemplateInfo.result}</pre>`:""))}
+               </div>`;
+                
+            } else {
+                console.error('wrong type for field', this.name, this.type);
+            }
+            return html`
+               <div class="cfield" @click=${this.click}>
+                 <div class="name">${this.name}${this.required ? "*":""}:</div>
+                 <div style="display: flex; flex-flow: column;">
+                    <div class="avalue">${editElem}</div>
+                    ${renderHtml}
+                    <slot name="help" class="shelp"></slot>
+                 </div>
+               </div>`;
+        } else {
+            return html`
+               <div class="cfield" @click=${this.click}>
+                 <div class="name">${this.name}${this.required ? "*":""}:</div>
+                 <code class="avalue">${this.value}</code>
+               </div>`;
+        }
+
+    }
+    static styles = css`
+       .cfield {
+          display: flex;
+          flex-flow: row wrap;
+          align-items: center;
+       }
+       .name {
+          margin-right: 1em;
+       }
+       .shelp {
+          font-size: 0.9em;
+       }
+     }
+    `;
+}
+
+class Alert2EditDefaults extends LitElement {
+    static properties = {
+        hass: { attribute: false },
+        _serverDefaults: { state: true },
+    }
+    constructor() {
+        super();
+    }
+    setConfig(config) {
+        this._cardConfig = config;
+    }
+    connectedCallback() {
+        super.connectedCallback();
+        this.refresh();
+    }
+    async refresh() {
+        let retv;
+        try {
+            this._serverDefaults = await this.hass.callApi('POST', 'alert2/loadDefaults', {});
+        } catch (err) {
+            this._serverDefaults = { error: 'http err: ' + err };
+            return;
+        }
+    }
+    changed(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        console.log('yay got change: ', value);
+    }
+    render() {
+        if (!this.hass) { return "waiting for hass"; }
+        if (!this._serverDefaults) { return "waiting for _serverDefaults"; }
+        if (this._serverDefaults.error) {
+            return html`<ha-alert alert-type=${"error"}>${this._serverDefaults.error}</ha-alert>`;
+        }
+        return html`
+         <div class="container" >
+            <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE} templateType=${TemplateTypes.LIST} .value=${this._serverDefaults.yaml.notifier} @zchange=${this.changed}><div slot="help">some help text</div></alert2-cfg-field>
+         </div>
+         `;
+    }
+    
+    static styles = css`
+    .cfield > p {
+        margin-bottom: 0;
+     }
+    .shelp {
+        margin-left: 1em;
+        font-size: 0.9em;
+     }
+     .shelp > ul {
+        margin-top: 0.1em;
+        margin-bottom: 0;
+     }
+      `;
+}
+
+
+
+
 class Alert2Create extends LitElement {
     static properties = {
         hass: { attribute: false },
@@ -1715,3 +1897,5 @@ class Alert2Create extends LitElement {
 
 customElements.define('alert2-manager', Alert2Manager);
 customElements.define('alert2-create', Alert2Create);
+customElements.define('alert2-edit-defaults', Alert2EditDefaults);
+customElements.define('alert2-cfg-field', Alert2CfgField);
