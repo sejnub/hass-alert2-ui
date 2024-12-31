@@ -1573,6 +1573,7 @@ class Alert2Create extends LitElement {
         yaml += '\n  alerts:';
         if (this.alertCfg.domain) { yaml += '\n    - domain: ' + this.alertCfg.domain; }
         if (this.alertCfg.name) { yaml += '\n      name: ' + this.alertCfg.name; }
+        if (this.alertCfg.friendly_name) { yaml += '\n      friendly_name: ' + this.alertCfg.friendly_name; }
         return yaml;
     }
     render() {
@@ -1591,32 +1592,46 @@ class Alert2Create extends LitElement {
                   <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
                     @change=${this._topRadioClick} ></ha-radio></span>
                   <span slot="secondary">Fires while a condition is satisfied</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
                   <span>Event</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.COND}
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
                     @change=${this._topRadioClick} ></ha-radio></span>
                   <span slot="secondary">Fires when triggered</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
                   <span>Generator</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.COND}
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
                     @change=${this._topRadioClick} ></ha-radio></span>
                   <span slot="secondary">Use patterns to generate multiple alert entities</span></ha-list-item>
             </ha-list>
-            <ha-textfield label="Domain" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._domainChange}></ha-textfield>
-            <ha-textfield label="Name" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} @input=${this._nameChange}></ha-textfield>
-            <div><p>Condition*</p>
+            <div class="cfield"><p>domain*</p>
+               <ha-textfield .required=${true} type="text" @input=${this._domainChange}></ha-textfield>
+               <div class="shelp">Part of the entity name. Usually the object causing the alert (e.g., garage_door)</div>
+            </div>
+            <div class="cfield"><p>name*</p>
+               <ha-textfield .required=${true} type="text" @input=${this._nameChange}></ha-textfield>
+               <div class="shelp">Part of the entity name. Typically the particular fault occuring (e.g., open_too_long)</div>
+            </div>
+            <div class="cfield"><p>friendly name</p>
+               <ha-textfield .required=${false} type="text" @input=${this._friendlynameChange}></ha-textfield>
+               <div class="shelp">Optional name to display in UI and in notifications instead of entity_id</div>
+            </div>
+            <div class="cfield"><p>Condition*</p>
                <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._conditionChange} dir="ltr"
                   linewrap></ha-code-editor>
-               ${mdown}
-            </div>
-            <div style="display: flex; flex-flow: row; align-items: center;">
-              ${this.conditionEval.rendering ? html`<ha-circular-progress class="render-spinner"
-                    indeterminate size="small" ></ha-circular-progress>` : 
-                (this.conditionEval.error != null ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
-                     </ha-alert>` : 
-                (this.conditionEval.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
-                    <pre class="rendered">${this.conditionEval.result}</pre>`:""))}
+               <div class="shelp">This must evaluate to "truthy" (i.e., true, yes, on, 1) for an alert to fire. Can be:
+                  <ul><li>Template evaluating to truthy. E.g. <code>{{ states('sensor.my_dev_temp') > 33 }}</code>
+                      <li>entity_name.  E.g. <code>binary_sensor.something_happening</code>
+                  </ul>
+               </div>
+               <div style="display: flex; flex-flow: row; align-items: center; margin-left: 1em;">
+                 ${this.conditionEval.rendering ? html`<ha-circular-progress class="render-spinner"
+                       indeterminate size="small" ></ha-circular-progress>` : 
+                   (this.conditionEval.error != null ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
+                        </ha-alert>` : 
+                   (this.conditionEval.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
+                       <pre class="rendered">${this.conditionEval.result}</pre>`:""))}
+               </div>
             </div>
 
             <h3>Output</h1>
@@ -1628,6 +1643,17 @@ class Alert2Create extends LitElement {
     }
     
     static styles = css`
+    .cfield > p {
+        margin-bottom: 0;
+     }
+    .shelp {
+        margin-left: 1em;
+        font-size: 0.9em;
+     }
+     .shelp > ul {
+        margin-top: 0.1em;
+        margin-bottom: 0;
+     }
     .container {
         margin-bottom: 1em;
      }
@@ -1641,7 +1667,7 @@ class Alert2Create extends LitElement {
         //console.log('radio clicked', value);
     }
     _topClick(name, ev) {
-        //console.log('top clicked', name, ev, this);
+        //console.log('top clicked', name, TopTypes.EVENT, this);
         this.topType = name;
     }
     _domainChange(ev) {
@@ -1651,6 +1677,10 @@ class Alert2Create extends LitElement {
     _nameChange(ev) {
         let value = ev.detail?.value || ev.target.value;
         this.alertCfg.name = value;
+    }
+    _friendlynameChange(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this.alertCfg.friendly_name = value;
     }
     _conditionChange(ev) {
         let value = ev.detail?.value || ev.target.value;
