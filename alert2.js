@@ -1505,7 +1505,7 @@ class Alert2Manager extends LitElement {
     async editDefaults(ev) {
         let innerElem = document.createElement('alert2-edit-defaults');
         innerElem.hass = this._hass;
-        jCreateDialog(this, 'Edit defaults?', innerElem);
+        jCreateDialog(this, 'Alert2 Defaults', innerElem);
     }
     static styles = css`
       .card-header {
@@ -1562,12 +1562,15 @@ class Alert2CfgField extends LitElement {
         name: {  },
         type: {  }, // FieldTypes
         templateType: {  },
-        value: { attribute: false },
-        finalVal: { attribute: false },
+        //value: { attribute: false },
+        //finalVal: { attribute: false },
+        //defaultVal: { attribute: false },
+        topConfigs: { attribute: false },
         //default: { attribute: false },
         required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
         _expanded: { state: true },
         renderTemplateInfo: { state: true },
+        inDefaults: { state: true },
     }
     constructor() {
         super();
@@ -1577,7 +1580,8 @@ class Alert2CfgField extends LitElement {
         this.renderTemplateInfo = { rendering: false, error: null, result: null };
     }
     async doRenderTemplate() {
-        if (!this.value) {
+        let value = uToE((this.inDefaults ? this.topConfigs.rawUi.defaults : this.topConfigs.rawUi)[this.name]);
+        if (!value) {
             this.renderTemplateInfo = { rendering: false, error: null, result: null };
             return;
         }
@@ -1585,7 +1589,7 @@ class Alert2CfgField extends LitElement {
         let retv;
         try {
             retv = await this.hass.callApi('POST', 'alert2/templateRender',
-                                           { type: this.templateType, txt: this.value });
+                                           { type: this.templateType, txt: value });
         } catch (err) {
             this.renderTemplateInfo = { rendering: false, error: 'http err: ' + JSON.stringify(err), result: null };
             return;
@@ -1611,18 +1615,19 @@ class Alert2CfgField extends LitElement {
     }
     _change(ev) {
         let value = ev.detail?.value || ev.target.value;
-        this.value = value;
+        let valueParent = this.inDefaults ? this.topConfigs.rawUi.defaults : this.topConfigs.rawUi;
+        valueParent[this.name] = value;
 
         if (this.type == FieldTypes.FLOAT) {
-            this.renderTemplateInfo.error = (this.value != '' && !isFloat(this.value)) ?
+            this.renderTemplateInfo.error = (value != '' && !isFloat(value)) ?
                 html`Value "${this.value}" is not a float` : null;
         } else if (this.type == FieldTypes.BOOL) {
-            this.renderTemplateInfo.error = (this.value != '' && !isTruthy(this.value)) ?
+            this.renderTemplateInfo.error = (value != '' && !isTruthy(value)) ?
                 html`Value "${this.value}" is not truthy (e.g., "true", "on" or opposites)` : null;
         } // for STR all values are ok.  For TEMPLATE, the server RPC does validation
 
         //console.log('_change', value);
-        jFireEvent(this, "zchange", { value: value });
+        //jFireEvent(this, "zchange", { value: value });
         if (this.type == FieldTypes.TEMPLATE) {
             this.renderTemplateD();
         }
@@ -1631,24 +1636,29 @@ class Alert2CfgField extends LitElement {
     render() {
         //console.log(this.name, this.type, this.value, this.required, this._expanded);
         if (!this.hass) { return "waiting for hass"; }
+        let valueParent = this.inDefaults ? this.topConfigs.rawUi.defaults : this.topConfigs.rawUi;
+        let value = uToE(valueParent[this.name]);
+        let defaultValue = uToE((this.inDefaults ? this.topConfigs.rawYaml.defaults : this.topConfigs.rawYaml)[this.name]);
+        let finalValue = uToE((this.inDefaults ? this.topConfigs.raw.defaults : this.topConfigs.raw)[this.name]);
+        //console.log(this.name, finalValue, (this.inDefaults ? this.topConfigs.raw.defaults : this.topConfigs.raw)[this.name]);
         if (this._expanded) {
             let editElem;
             let renderHtml = '';
             if (this.type == FieldTypes.STR) {
-                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
+                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value}
                                        @input=${this._change}></ha-textfield>`;
             } else if (this.type == FieldTypes.FLOAT) {
-                editElem = html`<ha-textfield .required=${this.required} type="number" .value=${this.value}
+                editElem = html`<ha-textfield .required=${this.required} type="number" .value=${value}
                                        @input=${this._change}></ha-textfield>`;
             } else if (this.type == FieldTypes.BOOL) {
-                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
+                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value}
                                        @input=${this._change}></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
                 let lenStr = '';
                 if (this.templateType == TemplateTypes.LIST && this.renderTemplateInfo.result) {
                     lenStr = ` (len=${this.renderTemplateInfo.result.length})`;
                 }
-                editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.value} .readOnly=${false}
+                editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
                   linewrap></ha-code-editor>`;
                 renderHtml = (this.renderTemplateInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${''+this.renderTemplateInfo.result}</pre></div>`:"";
@@ -1666,6 +1676,7 @@ class Alert2CfgField extends LitElement {
                             html`<ha-alert alert-type=${"warning"}>${this.renderTemplateInfo.error}</ha-alert>` : ""}
                     <div style="margin-left: 1em;">
                       ${renderHtml}
+                      <div>Default if empty: <code>${defaultValue}</code></div>
                       <slot name="help" class="shelp"></slot>
                     </div>
                  </div>
@@ -1675,7 +1686,7 @@ class Alert2CfgField extends LitElement {
                <div class="cfield" @click=${this.click}>
                  <div class="name">${this.name}${this.required ? "*":""}:</div>
                  ${this.renderTemplateInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
-                 <code class="avalue">${this.finalVal}</code>
+                 <code class="avalue">${finalValue}</code>
                </div>`;
         }
 
@@ -1697,7 +1708,7 @@ class Alert2CfgField extends LitElement {
     `;
 }
 
-function uToE(val) { return (val == undefined) ? '' : val; }
+function uToE(val) { return (val == undefined) ? '' : (''+val); }
 
 class Alert2EditDefaults extends LitElement {
     static properties = {
@@ -1763,28 +1774,45 @@ class Alert2EditDefaults extends LitElement {
          <div class="container" >
             <h3>Default alert parameters</h3>
             <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
-                .finalVal=${uToE(this._topConfigs.raw.defaults.notifier)}
-                templateType=${TemplateTypes.LIST} .value=${uToE(this._topConfigs.rawUi.defaults.notifier)}
-                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.defaults.notifier = val;}); }}>
+                .inDefaults=${true} .topConfigs=${this._topConfigs} templateType=${TemplateTypes.LIST} >
                <div slot="help">
-                   <div>Default if empty: <code>${this._topConfigs.rawYaml.defaults.notifier}</code></div>
                    some help text
                </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="summary_notifier" type=${FieldTypes.TEMPLATE}
+                .inDefaults=${true} .topConfigs=${this._topConfigs} templateType=${TemplateTypes.LIST} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="annotate_messages" type=${FieldTypes.BOOL}
+                .inDefaults=${true} .topConfigs=${this._topConfigs} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
+                .inDefaults=${true} .topConfigs=${this._topConfigs} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="throttle_fires_per_mins" type=${FieldTypes.STR}
+                .inDefaults=${true} .topConfigs=${this._topConfigs} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+
             <h3>Top-level options</h3>
             <alert2-cfg-field .hass=${this.hass} name="skip_internal_errors" type=${FieldTypes.BOOL}
-                .value=${uToE(this._topConfigs.rawUi.skip_internal_errors)}
-                .finalVal=${uToE(this._topConfigs.raw.skip_internal_errors)}
-                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.skip_internal_errors = val;}); }}>
+                .inDefaults=${false} .topConfigs=${this._topConfigs} >
                <div slot="help">
-                   <div>Default if empty: <code>${this._topConfigs.rawYaml.skip_internal_errors}</code></div>
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="notifier_startup_grace_secs" type=${FieldTypes.FLOAT}
-                .finalVal=${uToE(this._topConfigs.raw.notifier_startup_grace_secs)}
-                .value=${uToE(this._topConfigs.rawUi.notifier_startup_grace_secs)}
-                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.notifier_startup_grace_secs = val;}); }}>
+                .inDefaults=${false} .topConfigs=${this._topConfigs} >
                <div slot="help">
-                   <div>Default if empty: <code>${this._topConfigs.rawYaml.notifier_startup_grace_secs}</code></div>
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="defer_startup_notifications" type=${FieldTypes.STR}
+                .inDefaults=${false} .topConfigs=${this._topConfigs} >
+               <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             
