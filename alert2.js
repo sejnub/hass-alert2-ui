@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.3  (internal 46)';
+const VERSION = 'v1.5.3  (internal 47)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -1563,6 +1563,7 @@ class Alert2CfgField extends LitElement {
         type: {  }, // FieldTypes
         templateType: {  },
         value: { attribute: false },
+        finalVal: { attribute: false },
         //default: { attribute: false },
         required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
         _expanded: { state: true },
@@ -1611,6 +1612,15 @@ class Alert2CfgField extends LitElement {
     _change(ev) {
         let value = ev.detail?.value || ev.target.value;
         this.value = value;
+
+        if (this.type == FieldTypes.FLOAT) {
+            this.renderTemplateInfo.error = (this.value != '' && !isFloat(this.value)) ?
+                html`Value "${this.value}" is not a float` : null;
+        } else if (this.type == FieldTypes.BOOL) {
+            this.renderTemplateInfo.error = (this.value != '' && !isTruthy(this.value)) ?
+                html`Value "${this.value}" is not truthy (e.g., "true", "on" or opposites)` : null;
+        } // for STR all values are ok.  For TEMPLATE, the server RPC does validation
+
         //console.log('_change', value);
         jFireEvent(this, "zchange", { value: value });
         if (this.type == FieldTypes.TEMPLATE) {
@@ -1630,15 +1640,9 @@ class Alert2CfgField extends LitElement {
             } else if (this.type == FieldTypes.FLOAT) {
                 editElem = html`<ha-textfield .required=${this.required} type="number" .value=${this.value}
                                        @input=${this._change}></ha-textfield>`;
-                if (this.value != '' && !isFloat(this.value)) {
-                    renderHtml = html`<ha-alert alert-type=${"error"}>Value "${this.value}" is not a float</ha-alert>`;
-                }
             } else if (this.type == FieldTypes.BOOL) {
                 editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
                                        @input=${this._change}></ha-textfield>`;
-                if (this.value != '' && !isTruthy(this.value)) {
-                    renderHtml = html`<ha-alert alert-type=${"error"}>Value "${this.value}" is not truthy</ha-alert>`;
-                }
             } else if (this.type == FieldTypes.TEMPLATE) {
                 let lenStr = '';
                 if (this.templateType == TemplateTypes.LIST && this.renderTemplateInfo.result) {
@@ -1647,13 +1651,7 @@ class Alert2CfgField extends LitElement {
                 editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
                   linewrap></ha-code-editor>`;
-                renderHtml = html`<div style="margin-left: 1em;">
-                   ${this.renderTemplateInfo.rendering ? html`<ha-circular-progress class="render-spinner"
-                       indeterminate size="small" ></ha-circular-progress>` : 
-                   [(this.renderTemplateInfo.error != null ? html`<ha-alert alert-type=${"error"}>${this.renderTemplateInfo.error}</ha-alert>` : ""),
-                   (this.renderTemplateInfo.result != null ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${''+this.renderTemplateInfo.result}</pre></div>`:"")]}
-               </div>`;
-                
+                renderHtml = (this.renderTemplateInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${''+this.renderTemplateInfo.result}</pre></div>`:"";
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
@@ -1662,15 +1660,22 @@ class Alert2CfgField extends LitElement {
                  <div class="name" @click=${this.click} >${this.name}${this.required ? "*":""}:</div>
                  <div style="display: flex; flex-flow: column;">
                     <div class="avalue">${editElem}</div>
-                    ${renderHtml}
-                    <slot name="help" class="shelp"></slot>
+                    ${this.renderTemplateInfo.rendering ?
+                        html`<ha-circular-progress class="render-spinner" indeterminate size="small" ></ha-circular-progress>` : 
+                        this.renderTemplateInfo.error != null ?
+                            html`<ha-alert alert-type=${"warning"}>${this.renderTemplateInfo.error}</ha-alert>` : ""}
+                    <div style="margin-left: 1em;">
+                      ${renderHtml}
+                      <slot name="help" class="shelp"></slot>
+                    </div>
                  </div>
                </div>`;
         } else {
             return html`
                <div class="cfield" @click=${this.click}>
                  <div class="name">${this.name}${this.required ? "*":""}:</div>
-                 <code class="avalue">${this.value}</code>
+                 ${this.renderTemplateInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
+                 <code class="avalue">${this.finalVal}</code>
                </div>`;
         }
 
@@ -1725,6 +1730,7 @@ class Alert2EditDefaults extends LitElement {
         let value = ev.detail?.value || ev.target.value;
         console.log('yay got change: ', value);
         fieldSet(value);
+        this._serverErr = null;
     }
     async _save(ev) {
         let abutton = ev.target;
@@ -1736,13 +1742,13 @@ class Alert2EditDefaults extends LitElement {
         } catch (err) {
             this._saveInProgress = false;
             abutton.actionError();
-            showToast(this, "error: " + err.message);
+            this._serverErr = "error: " + err.message;
             return;
         }
         this._saveInProgress = false;
         if (rez.error) {
             abutton.actionError();
-            showToast(this, "error: " + rez.error);
+            this._serverErr = "error: " + rez.error;
             return;
         }
         // Update _topConfigs mostly cuz server filters out empty fields,
@@ -1752,14 +1758,12 @@ class Alert2EditDefaults extends LitElement {
     }
     render() {
         if (!this.hass) { return "waiting for hass"; }
-        if (this._serverErr) {
-            return html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>`;
-        }
         if (!this._topConfigs) { return "waiting for _topConfigs"; }
         return html`
          <div class="container" >
             <h3>Default alert parameters</h3>
             <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
+                .finalVal=${uToE(this._topConfigs.raw.defaults.notifier)}
                 templateType=${TemplateTypes.LIST} .value=${uToE(this._topConfigs.rawUi.defaults.notifier)}
                  @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.defaults.notifier = val;}); }}>
                <div slot="help">
@@ -1769,24 +1773,33 @@ class Alert2EditDefaults extends LitElement {
             <h3>Top-level options</h3>
             <alert2-cfg-field .hass=${this.hass} name="skip_internal_errors" type=${FieldTypes.BOOL}
                 .value=${uToE(this._topConfigs.rawUi.skip_internal_errors)}
+                .finalVal=${uToE(this._topConfigs.raw.skip_internal_errors)}
                  @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.skip_internal_errors = val;}); }}>
                <div slot="help">
                    <div>Default if empty: <code>${this._topConfigs.rawYaml.skip_internal_errors}</code></div>
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="notifier_startup_grace_secs" type=${FieldTypes.FLOAT}
+                .finalVal=${uToE(this._topConfigs.raw.notifier_startup_grace_secs)}
                 .value=${uToE(this._topConfigs.rawUi.notifier_startup_grace_secs)}
                  @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.notifier_startup_grace_secs = val;}); }}>
                <div slot="help">
                    <div>Default if empty: <code>${this._topConfigs.rawYaml.notifier_startup_grace_secs}</code></div>
                    some help text
                </div></alert2-cfg-field>
-
-            <ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button>
+            
+            <div style="margin-top: 0.5em;"><ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button></div>
+            ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
          </div>`;
-        
     }
     static styles = css`
+    h3 {
+       margin-bottom: 0.3em;
+       margin-top: 1.5em;
+    }
+    h3:first-of-type {
+       margin-top: 0em;
+    }
     .cfield > p {
         margin-bottom: 0;
      }
@@ -1879,7 +1892,7 @@ class Alert2Create extends LitElement {
                <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._conditionChange} dir="ltr"
                   linewrap></ha-code-editor>
-               <div class="shelp">This must evaluate to "truthy" (i.e., true, yes, on, 1) for an alert to fire. Can be:
+               <div class="shelp">This must evaluate to truthy (e.g., "true", "on" or opposites) for an alert to fire. Can be:
                   <ul><li>Template evaluating to truthy. E.g. <code>{{ states('sensor.my_dev_temp') > 33 }}</code>
                       <li>entity_name.  E.g. <code>binary_sensor.something_happening</code>
                   </ul>
