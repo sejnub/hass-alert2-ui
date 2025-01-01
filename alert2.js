@@ -8,6 +8,17 @@ const VERSION = 'v1.5.3  (internal 46)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
+function jFireEvent(elem, evName, params) {
+    const event = new Event(evName, {
+        bubbles: true,
+        cancelable: Boolean(false),
+        composed: true,
+    });
+    event.detail = params;
+    elem.dispatchEvent(event);
+}
+function showToast(elem, amsg) { jFireEvent(elem, "hass-notification", { message: amsg }); }
+
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -131,7 +142,7 @@ class Alert2Overview extends LitElement {
         } catch (err) {
             this._ackAllInProgress = false;
             abutton.actionError();
-            this._showToast("error: " + err.message);
+            showToast(this, "error: " + err.message);
             return;
         }
         this._ackAllInProgress = false;
@@ -648,9 +659,6 @@ class HaAlert2State extends LitElement {
             this.requestUpdate();
         }
     }
-    _showToast(amsg) {
-        jFireEvent(this, "hass-notification", { message: amsg });
-    }
     async _jack(ev) {
         await this.ackInternal(ev, true);
     }
@@ -676,7 +684,7 @@ class HaAlert2State extends LitElement {
             } catch (err) {
                 this._ackInProgress = false;
                 abutton.actionError();
-                this._showToast("error: " + err.message);
+                showToast(this, "error: " + err.message);
                 return;
             }
             this._ackInProgress = false;
@@ -849,15 +857,6 @@ function strIsValidNumber(astr) {
     if (bstr.length > 0 && !isNaN(val) && val >= 0) {
         return val;
     } else { return null; }
-}
-function jFireEvent(elem, evName, params) {
-    const event = new Event(evName, {
-        bubbles: true,
-        cancelable: Boolean(false),
-        composed: true,
-    });
-    event.detail = params;
-    elem.dispatchEvent(event);
 }
 
 // Add this attribute to alert entity attributes:
@@ -1187,9 +1186,6 @@ class MoreInfoAlert2 extends LitElement {
         const value = ev.target.value;
         this._currValue = value;
     }
-    _showToast(amsg) {
-        jFireEvent(this, "hass-notification", { message: amsg });
-    }
     async _jupdate(ev) {
         console.log('submit clicked', this._currValue, this);
         this._requestInProgress = true;
@@ -1205,7 +1201,7 @@ class MoreInfoAlert2 extends LitElement {
                 this._requestInProgress = false;
                 abutton.actionError();
                 console.error('bad value', this._currValue);
-                this._showToast("Non-positive numeric value: " + this._currValue);
+                showToast(this, "Non-positive numeric value: " + this._currValue);
                 return;
             }
             data.enable = 'on';
@@ -1226,7 +1222,7 @@ class MoreInfoAlert2 extends LitElement {
         } catch (err) {
             this._requestInProgress = false;
             abutton.actionError();
-            this._showToast("error: " + err.message);
+            showToast(this, "error: " + err.message);
             return;
         }
         this._requestInProgress = false;
@@ -1250,7 +1246,7 @@ class MoreInfoAlert2 extends LitElement {
         } catch (err) {
             this._ackInProgress = false;
             abutton.actionError();
-            this._showToast("error: " + err.message);
+            showToast(this, "error: " + err.message);
             return;
         }
         this._ackInProgress = false;
@@ -1537,6 +1533,13 @@ class Alert2Manager extends LitElement {
     `;
 };
 
+function isFloat(a) {
+    let v = Number(a);
+    return !isNaN(v);
+}
+function isTruthy(a) {
+    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
+}
 function makeEnum(obj) {
     return new Proxy(obj, { get(target, name) { if (obj[name]) { return obj[name] } else { throw new Error(`field ${name} not in obj`); } } });
 }
@@ -1550,7 +1553,7 @@ const debounce = (callback, wait) => {
   };
 }
 let TopTypes = makeEnum({ COND:  'cond', EVENT:  "event", GENERATOR: "generator" });
-let FieldTypes = makeEnum({ TEMPLATE: 'template', FLOAT:  "float", STR: "str" });
+let FieldTypes = makeEnum({ TEMPLATE: 'template', FLOAT:  "float", STR: "str", BOOL: 'bool' });
 let TemplateTypes = makeEnum({ LIST: 'list', CONDITION: 'condition' });
 
 class Alert2CfgField extends LitElement {
@@ -1560,6 +1563,7 @@ class Alert2CfgField extends LitElement {
         type: {  }, // FieldTypes
         templateType: {  },
         value: { attribute: false },
+        //default: { attribute: false },
         required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
         _expanded: { state: true },
         renderTemplateInfo: { state: true },
@@ -1604,16 +1608,16 @@ class Alert2CfgField extends LitElement {
     click(ev) {
         this._expanded = !this._expanded;
     }
-    editClick(ev) {
-        ev.stopPropagation(); // so doesn't cause expansion
-        //return true;
-    }
     _change(ev) {
         let value = ev.detail?.value || ev.target.value;
         this.value = value;
+        //console.log('_change', value);
         jFireEvent(this, "zchange", { value: value });
-        this.renderTemplateD();
+        if (this.type == FieldTypes.TEMPLATE) {
+            this.renderTemplateD();
+        }
     }
+            
     render() {
         //console.log(this.name, this.type, this.value, this.required, this._expanded);
         if (!this.hass) { return "waiting for hass"; }
@@ -1622,7 +1626,19 @@ class Alert2CfgField extends LitElement {
             let renderHtml = '';
             if (this.type == FieldTypes.STR) {
                 editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
-                                       @input=${this._change} @click=${this.editClick}></ha-textfield>`;
+                                       @input=${this._change}></ha-textfield>`;
+            } else if (this.type == FieldTypes.FLOAT) {
+                editElem = html`<ha-textfield .required=${this.required} type="number" .value=${this.value}
+                                       @input=${this._change}></ha-textfield>`;
+                if (this.value != '' && !isFloat(this.value)) {
+                    renderHtml = html`<ha-alert alert-type=${"error"}>Value "${this.value}" is not a float</ha-alert>`;
+                }
+            } else if (this.type == FieldTypes.BOOL) {
+                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${this.value}
+                                       @input=${this._change}></ha-textfield>`;
+                if (this.value != '' && !isTruthy(this.value)) {
+                    renderHtml = html`<ha-alert alert-type=${"error"}>Value "${this.value}" is not truthy</ha-alert>`;
+                }
             } else if (this.type == FieldTypes.TEMPLATE) {
                 let lenStr = '';
                 if (this.templateType == TemplateTypes.LIST && this.renderTemplateInfo.result) {
@@ -1630,7 +1646,7 @@ class Alert2CfgField extends LitElement {
                 }
                 editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
-                  linewrap @click=${this.editClick}></ha-code-editor>`;
+                  linewrap></ha-code-editor>`;
                 renderHtml = html`<div style="margin-left: 1em;">
                    ${this.renderTemplateInfo.rendering ? html`<ha-circular-progress class="render-spinner"
                        indeterminate size="small" ></ha-circular-progress>` : 
@@ -1642,8 +1658,8 @@ class Alert2CfgField extends LitElement {
                 console.error('wrong type for field', this.name, this.type);
             }
             return html`
-               <div class="cfield" @click=${this.click}>
-                 <div class="name">${this.name}${this.required ? "*":""}:</div>
+               <div class="cfield">
+                 <div class="name" @click=${this.click} >${this.name}${this.required ? "*":""}:</div>
                  <div style="display: flex; flex-flow: column;">
                     <div class="avalue">${editElem}</div>
                     ${renderHtml}
@@ -1667,6 +1683,7 @@ class Alert2CfgField extends LitElement {
        }
        .name {
           margin-right: 1em;
+          cursor: pointer;
        }
        .shelp {
           font-size: 0.9em;
@@ -1675,10 +1692,14 @@ class Alert2CfgField extends LitElement {
     `;
 }
 
+function uToE(val) { return (val == undefined) ? '' : val; }
+
 class Alert2EditDefaults extends LitElement {
     static properties = {
         hass: { attribute: false },
-        _serverDefaults: { state: true },
+        _topConfigs: { state: true },
+        _serverErr: { state: true },
+        _saveInProgress: { state: true },
     }
     constructor() {
         super();
@@ -1693,29 +1714,78 @@ class Alert2EditDefaults extends LitElement {
     async refresh() {
         let retv;
         try {
-            this._serverDefaults = await this.hass.callApi('POST', 'alert2/loadDefaults', {});
+            this._topConfigs = await this.hass.callApi('POST', 'alert2/loadTopConfig', {});
         } catch (err) {
-            this._serverDefaults = { error: 'http err: ' + JSON.stringify(err) };
+            this._serverErr = 'http err: ' + JSON.stringify(err);
             return;
         }
+        console.log('got topConfig', this._topConfigs);
     }
-    changed(ev) {
+    changed(ev, fieldSet) {
         let value = ev.detail?.value || ev.target.value;
         console.log('yay got change: ', value);
+        fieldSet(value);
+    }
+    async _save(ev) {
+        let abutton = ev.target;
+        this._saveInProgress = true;
+        let rez;
+        try {
+            rez = await this.hass.callApi('POST', 'alert2/saveTopConfig',
+                                          {topConfig: this._topConfigs.rawUi});
+        } catch (err) {
+            this._saveInProgress = false;
+            abutton.actionError();
+            showToast(this, "error: " + err.message);
+            return;
+        }
+        this._saveInProgress = false;
+        if (rez.error) {
+            abutton.actionError();
+            showToast(this, "error: " + rez.error);
+            return;
+        }
+        // Update _topConfigs mostly cuz server filters out empty fields,
+        // and so we don't drift between browser and server state re configs
+        this._topConfigs = rez;
+        abutton.actionSuccess();
     }
     render() {
         if (!this.hass) { return "waiting for hass"; }
-        if (!this._serverDefaults) { return "waiting for _serverDefaults"; }
-        if (this._serverDefaults.error) {
-            return html`<ha-alert alert-type=${"error"}>${this._serverDefaults.error}</ha-alert>`;
+        if (this._serverErr) {
+            return html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>`;
         }
+        if (!this._topConfigs) { return "waiting for _topConfigs"; }
         return html`
          <div class="container" >
-            <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE} templateType=${TemplateTypes.LIST} .value=${this._serverDefaults.yaml.notifier} @zchange=${this.changed}><div slot="help">some help text</div></alert2-cfg-field>
-         </div>
-         `;
+            <h3>Default alert parameters</h3>
+            <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
+                templateType=${TemplateTypes.LIST} .value=${uToE(this._topConfigs.rawUi.defaults.notifier)}
+                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.defaults.notifier = val;}); }}>
+               <div slot="help">
+                   <div>Default if empty: <code>${this._topConfigs.rawYaml.defaults.notifier}</code></div>
+                   some help text
+               </div></alert2-cfg-field>
+            <h3>Top-level options</h3>
+            <alert2-cfg-field .hass=${this.hass} name="skip_internal_errors" type=${FieldTypes.BOOL}
+                .value=${uToE(this._topConfigs.rawUi.skip_internal_errors)}
+                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.skip_internal_errors = val;}); }}>
+               <div slot="help">
+                   <div>Default if empty: <code>${this._topConfigs.rawYaml.skip_internal_errors}</code></div>
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="notifier_startup_grace_secs" type=${FieldTypes.FLOAT}
+                .value=${uToE(this._topConfigs.rawUi.notifier_startup_grace_secs)}
+                 @zchange=${(ev)=>{ this.changed(ev, (val)=>{this._topConfigs.rawUi.notifier_startup_grace_secs = val;}); }}>
+               <div slot="help">
+                   <div>Default if empty: <code>${this._topConfigs.rawYaml.notifier_startup_grace_secs}</code></div>
+                   some help text
+               </div></alert2-cfg-field>
+
+            <ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button>
+         </div>`;
+        
     }
-    
     static styles = css`
     .cfield > p {
         margin-bottom: 0;
