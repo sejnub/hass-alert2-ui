@@ -1639,7 +1639,8 @@ class Alert2CfgField extends LitElement {
         let valueParent = this.inDefaults ? this.topConfigs.rawUi.defaults : this.topConfigs.rawUi;
         let value = uToE(valueParent[this.name]);
         let defaultValue = uToE((this.inDefaults ? this.topConfigs.rawYaml.defaults : this.topConfigs.rawYaml)[this.name]);
-        let finalValue = uToE((this.inDefaults ? this.topConfigs.raw.defaults : this.topConfigs.raw)[this.name]);
+        let finalValue = (value == '') ? defaultValue : value;
+        //let finalValue = uToE((this.inDefaults ? this.topConfigs.raw.defaults : this.topConfigs.raw)[this.name]);
         //console.log(this.name, finalValue, (this.inDefaults ? this.topConfigs.raw.defaults : this.topConfigs.raw)[this.name]);
         if (this._expanded) {
             let editElem;
@@ -1887,6 +1888,12 @@ class Alert2Create extends LitElement {
         let mdown = html`this is <b>good2</b><ul><li>list1<li>list2</ul>`;
         return html`
          <div class="container" >
+            <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
+                .topConfigs=${this._topConfigs} .alertDict=     templateType=${TemplateTypes.LIST} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+
             <ha-list>
               <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
                   <span>Condition</span>
