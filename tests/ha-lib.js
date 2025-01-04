@@ -1,17 +1,21 @@
-         import {LitElement, html, css} from 'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
-         //import { classMap } from "https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit/directives/class-map";
-         import { FormfieldBase }           from "@material/mwc-formfield/mwc-formfield-base";
-         import { styles as formStyles }    from "@material/mwc-formfield/mwc-formfield.css";
-         import                                  "@material/mwc-button";
-         import { RadioBase }               from "@material/mwc-radio/mwc-radio-base";
-         import { styles as radioStyles }   from "@material/mwc-radio/mwc-radio.css";
-         import { TextFieldBase }           from "@material/mwc-textfield/mwc-textfield-base";
-         import {styles as textfieldStyles} from "@material/mwc-textfield/mwc-textfield.css";
-         import { MdListItem, MdSlider } from '@material/web/all.js';
-         //import { MdListItem }         from "@material/web/list/list-item";
-         //import { MdSlider }           from "@material/web/slider/slider";
-         //import { mdiAlertOctagram, mdiCheckBold } from "@mdi/js";
-         class HaSlider extends MdSlider {
+import { MdListItem, MdSlider, textfieldStyles, TextFieldBase, radioStyles, RadioBase,
+         formStyles, FormfieldBase, LitElement, html, css } from './lit-material.js';
+
+//import {LitElement, html, css} from './lit-core.min.js';
+//import { FormfieldBase }           from "@material/mwc-formfield/mwc-formfield-base";
+//import { styles as formStyles }    from "@material/mwc-formfield/mwc-formfield.css";
+//import                                  "@material/mwc-button";
+//import { RadioBase }               from "@material/mwc-radio/mwc-radio-base";
+//import { styles as radioStyles }   from "@material/mwc-radio/mwc-radio.css";
+//import { TextFieldBase }           from "@material/mwc-textfield/mwc-textfield-base";
+//import {styles as textfieldStyles} from "@material/mwc-textfield/mwc-textfield.css";
+//import { MdListItem, MdSlider } from './material.web.all.js';
+//import { MdListItem, MdSlider } from '@material/web/all.js';
+
+//import { MdListItem }         from "@material/web/list/list-item";
+//import { MdSlider }           from "@material/web/slider/slider";
+//import { mdiAlertOctagram, mdiCheckBold } from "@mdi/js";
+class HaSlider extends MdSlider {
              static styles = [
                  ...super.styles,
                  css`
