@@ -1599,14 +1599,19 @@ class Alert2CfgField extends LitElement {
         this.renderInfo = { rendering: false, error: null, result: null };
         this.focusOnce = false;
     }
+    connectedCallback() {
+        if (!this.currP) {
+            throw new Error("this.currP undefined");
+        }
+    }
     async doRenderTemplate() {
-        let value = uToE(this.currP[this.name]);
+        let value = uToE(this.getValue());
         if (!value) {
             this.renderInfo = { rendering: false, error: null, result: null };
             return;
         }
         this.renderInfo = { rendering: true, error: null, result: null };
-        let nameToUse = (this.namePrefix? this.namePrefix : '') + this.name;
+        let nameToUse = (this.namePrefix? (this.namePrefix+'.') : '') + this.name;
         let retv;
         try {
             retv = await this.hass.callApi('POST', 'alert2/renderValue',
@@ -1644,14 +1649,38 @@ class Alert2CfgField extends LitElement {
     _change(ev) {
         let value = ev.detail?.value || ev.target.value;
         console.log('_change', value);
+        let parentP = this.currP;
+        if (this.namePrefix) {
+            parentP = parentP[this.namePrefix];
+        }
+               
         if (value.trim() === '') {
-            delete this.currP[this.name];
+            if (parentP) {
+                delete parentP[this.name];
+                if (this.namePrefix && (Object.keys(this.parentP).length == 0)) {
+                    delete this.currP[this.namePrefix];
+                }
+            } // otherwise no entry to delete
         } else {
-            this.currP[this.name] = value;
+            if (parentP === undefined) { // means must be using namePrefix
+                this.currP[this.namePrefix] = {};
+                parentP = this.currP[this.namePrefix];
+            }
+            parentP[this.name] = value;
             this.renderD();
         }
         jFireEvent(this, "change", { });
     }
+    getValue() {
+        if (this.namePrefix) {
+            if (this.currP[this.namePrefix]) {
+                return this.currP[this.namePrefix][this.name];
+            }
+            return null;
+        }
+        return this.currP[this.name];
+    }
+        
     async firstFocus() {
         await this.updateComplete;
         console.log(this.shadowRoot.querySelectorAll('ha-textfield'));
@@ -1676,7 +1705,7 @@ class Alert2CfgField extends LitElement {
     }
     render() {
         if (!this.hass) { return "waiting for hass"; }
-        let value = uToE(this.currP[this.name]);
+        let value = uToE(this.getValue());
         let origValue = uToE(this.savedP[this.name]);
         let unsavedChange = html`<span style=${(value == origValue) ? 'visibility: hidden;':''}>*</span>`;
         let hasDefault = !!this.defaultP;
@@ -1987,9 +2016,9 @@ class Alert2Create extends LitElement {
     }
     _change(ev) {
         console.log('editor _change');
-        if (this.alertCfg.threshold && Object.keys(this.alertCfg.threshold).length == 0) {
-            delete this.alertCfg.threshold;
-        }
+        //if (this.alertCfg.threshold && Object.keys(this.alertCfg.threshold).length == 0) {
+        //    delete this.alertCfg.threshold;
+        // }
         this._serverErr = null;
         this.requestUpdate();
     }
@@ -1998,7 +2027,13 @@ class Alert2Create extends LitElement {
         yaml += '\n  alerts:';
         let isFirst = true;
         Object.keys(this.alertCfg).forEach((fname)=> {
-            if (this.alertCfg[fname]) {
+            let val = this.alertCfg[fname];
+            if (fname === 'threshold') {
+                Object.keys(this.alertCfg[fname]).forEach((fname2)=> {
+                    yaml += `\n        ${isFirst ? "- " : "  "}${fname}: ${this.alertCfg[fname][fname2]}`;
+                    isFirst = false;
+                });
+            } else {
                 yaml += `\n    ${isFirst ? "- " : "  "}${fname}: ${this.alertCfg[fname]}`;
                 isFirst = false;
             }
@@ -2112,26 +2147,26 @@ class Alert2Create extends LitElement {
                </div></alert2-cfg-field>
             <div>Threshold <div style="margin-left: 1em;">
                <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold."
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      templateType=${TemplateTypes.LIST}
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="hysteresis" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold."
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="maximum" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold."
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="minimum" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold."
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
