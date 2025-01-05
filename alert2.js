@@ -1730,6 +1730,7 @@ class Alert2CfgField extends LitElement {
                                        @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
+                    console.log('list result', this.renderInfo.result);
                     const maxCount = 5;
                     let firstOnly = (this.renderInfo.result.length > 5) ? `, showing first ${maxCount}` : '';
                     lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
