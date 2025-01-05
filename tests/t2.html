@@ -59,18 +59,6 @@
              
          }
         </style>
-        <script type="importmap">
-         {
-             "imports": {
-                 // "@mdi/js": "https://esm.run/@mdi/js",
-                 "@material/web/": "https://esm.run/@material/web/",
-                 "@material/mwc-formfield/": "https://esm.run/@material/mwc-formfield/",
-                 "@material/mwc-button": "https://esm.run/@material/mwc-button",
-                 "@material/mwc-radio/": "https://esm.run/@material/mwc-radio/",
-                 "@material/mwc-textfield/": "https://esm.run/@material/mwc-textfield/"
-             }
-         }
-        </script>
         <script>
          function waitForEvent(element, eventName) {
              return new Promise((resolve) => {
@@ -141,14 +129,14 @@
                                     'fires_since_last_notify': 0 },
                       entity_id: 'alert2.'+name };
          }
-         async function startTest(afunc, isEdit=false) {
+         async function startTest(afunc, isCreate=false) {
              let testStatusEl = document.querySelector('#testStatus');
              let testDiv = document.querySelector('#testDiv');
              testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
              };
-             let ao = document.createElement(isEdit ? 'alert2-create' :  'alert2-manager');
+             let ao = document.createElement(isCreate ? 'alert2-edit-defaults' :  'alert2-create');
              ao.hass = newHass;
              testDiv.appendChild(ao);
              await sleepMs(5);

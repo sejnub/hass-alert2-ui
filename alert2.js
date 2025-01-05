@@ -1,12 +1,11 @@
 const LitElement = Object.getPrototypeOf(customElements.get("ha-panel-lovelace"));
 const html = LitElement.prototype.html;
 const css = LitElement.prototype.css;
-const ref = LitElement.prototype.ref;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
 const VERSION = 'v1.5.3  (internal 47)';
-console.log(`alert2 ${VERSION}`, ref);
+console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
 function jFireEvent(elem, evName, params) {
@@ -1600,6 +1599,7 @@ class Alert2CfgField extends LitElement {
         this.focusOnce = false;
     }
     connectedCallback() {
+        super.connectedCallback();
         if (!this.currP) {
             throw new Error("this.currP undefined");
         }
@@ -1639,7 +1639,7 @@ class Alert2CfgField extends LitElement {
     setConfig(config) {
         this._cardConfig = config;
     }
-    click(ev) {
+    _click(ev) {
         this.expanded = !this.expanded;
         if (this.expanded) {
             this.focusOnce = true;
@@ -1683,10 +1683,10 @@ class Alert2CfgField extends LitElement {
         
     async firstFocus() {
         await this.updateComplete;
-        console.log(this.shadowRoot.querySelectorAll('ha-textfield'));
-        console.log(this.shadowRoot.querySelectorAll('ha-code-editor'));
+        //console.log(this.shadowRoot.querySelectorAll('ha-textfield'));
+        //console.log(this.shadowRoot.querySelectorAll('ha-code-editor'));
         let els = this.shadowRoot.querySelectorAll('ha-textfield, ha-code-editor');
-        console.log(els);
+        //console.log(els);
         if (els) {
             console.log('focusing on ', els[0].nodeName);
             if (els[0].nodeName == 'HA-TEXTFIELD') {
@@ -1695,7 +1695,9 @@ class Alert2CfgField extends LitElement {
                 setTimeout(()=>{
                     //els[0].focus();
                     let subel = els[0].shadowRoot.querySelector('div.cm-content');
-                    subel.focus();
+                    if (subel) { // code editor might aready have been closed
+                        subel.focus();
+                    }
                     console.warn('janky');
                 }, 1000);
             }
@@ -1715,6 +1717,7 @@ class Alert2CfgField extends LitElement {
         if (this.expanded) {
             let editElem;
             //let renderHtml = '';
+            let renderedStr = ''+displayStr(this.renderInfo.result);
             let lenStr = '';
             if (this.type == FieldTypes.STR) {
                 editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value}
@@ -1727,7 +1730,10 @@ class Alert2CfgField extends LitElement {
                                        @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
-                    lenStr = ` (len=${this.renderInfo.result.length})`;
+                    const maxCount = 5;
+                    let firstOnly = (this.renderInfo.result.length > 5) ? `, showing first ${maxCount}` : '';
+                    lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
+                    renderedStr = JSON.stringify(this.renderInfo.result.slice(0, maxCount));//   ''+displayStr(this.renderInfo.result.slice(0, maxCount));
                 }
                 editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
@@ -1735,14 +1741,14 @@ class Alert2CfgField extends LitElement {
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
-            let renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${''+displayStr(this.renderInfo.result)}</pre></div>`:"";
+            let renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${renderedStr}</pre></div>`:"";
             if (this.focusOnce) {
                 // I wish we had access to Lit's ref() directive.  Sigh.
                 this.firstFocus(); // async func
             }
             return html`
                <div class="cfield">
-                 <div class="name" @click=${this.click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
+                 <div class="name" @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
                  <div style="display: flex; flex-flow: column;">
                     <div class="avalue">${editElem}</div>
                     ${this.renderInfo.rendering ?
@@ -1757,12 +1763,13 @@ class Alert2CfgField extends LitElement {
                  </div>
                </div>`;
         } else {
-            return html`
-               <div class="cfield" @click=${this.click}>
+            let x = html`
+               <div class="cfield" @click=${this._click}>
                  <div class="name">${unsavedChange}${this.name}${this.required ? "*":""}:</div>
                  ${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
                  <code class="avalue">${displayStr(finalValue)}</code>
                </div>`;
+            return x;
         }
 
     }
@@ -1958,9 +1965,27 @@ class Alert2EditDefaults extends LitElement {
       `;
 }
 
-
-
-
+function yamlEscape(astr, removeNewline=true) {
+    const format = /[{}\[\]&*#?|\-<>=!%@:`,]/;
+    astr = astr.replace('\n', ' ');
+    if (format.test(astr)) {
+        return '"' + astr.replace('"', '\\"') + '"';
+    } else {
+        return astr;
+    }
+}
+function hasJinjaTempl(astr) {
+    const format = /{{|{%|{#/;
+    return format.test(astr);
+}
+function slugify(str) {
+    // Allows [] for convenience below. TODO -fix.
+    str = str.trim().toLowerCase();
+    str = str.replace(/[^a-z0-9 ._\[\]]/g, '')
+              .replace(/\s+/g, '_')
+              .replace(/_+/g, '_');
+  return str;
+}
 class Alert2Create extends LitElement {
     static properties = {
         hass: { attribute: false },
@@ -2015,7 +2040,7 @@ class Alert2Create extends LitElement {
         abutton.actionSuccess();
     }
     _change(ev) {
-        console.log('editor _change');
+        //console.log('editor _change');
         //if (this.alertCfg.threshold && Object.keys(this.alertCfg.threshold).length == 0) {
         //    delete this.alertCfg.threshold;
         // }
@@ -2027,21 +2052,39 @@ class Alert2Create extends LitElement {
         yaml += '\n  alerts:';
         let isFirst = true;
         Object.keys(this.alertCfg).forEach((fname)=> {
-            let val = this.alertCfg[fname];
+            yaml += `\n   ${isFirst ? "- " : "  "}`;
+            isFirst = false;
             if (fname === 'threshold') {
+                yaml += 'threshold:';
                 Object.keys(this.alertCfg[fname]).forEach((fname2)=> {
-                    yaml += `\n        ${isFirst ? "- " : "  "}${fname}: ${this.alertCfg[fname][fname2]}`;
-                    isFirst = false;
+                    yaml += `\n      ${fname2}: ${yamlEscape(this.alertCfg[fname][fname2])}`;
                 });
             } else {
-                yaml += `\n    ${isFirst ? "- " : "  "}${fname}: ${this.alertCfg[fname]}`;
-                isFirst = false;
+                let rawVal = this.alertCfg[fname].trim();
+                let val;
+                if (['domain','name', 'friendly_name', 'condition', 'message', 'title', 'target',
+                     'annotate_messages', 'early_start', 'generator_name',
+                     'done_message', 'delay_on_secs'].includes(fname)) {
+                    val = yamlEscape(rawVal);
+                } else if (['trigger', 'data', 'throttle_fires_per_mins', 'reminder_frequency_mins',
+                            ].includes(fname)) {
+                    val = rawVal;
+                } else if (['generator', 'notifier', 'summary_notifier'].includes(fname)) {
+                    if (hasJinjaTempl(rawVal)) {
+                        val = yamlEscape(rawVal);
+                    } else {
+                        // TODO - if val is array, then individually yamlEscape the elements.
+                        val = rawVal;
+                    }
+                }
+                if (['trigger', 'data'].includes(fname)) {
+                    val = val.replace('\n', '\n      ');
+                    yaml += `${fname}:\n      ${val}`;
+                } else {
+                    yaml += `${fname}: ${val}`;
+                }
             }
         });
-            
-        //if (this.alertCfg.domain) { yaml += '\n    - domain: ' + this.alertCfg.domain; }
-        //if (this.alertCfg.name) { yaml += '\n      name: ' + this.alertCfg.name; }
-        //if (this.alertCfg.friendly_name) { yaml += '\n      friendly_name: ' + this.alertCfg.friendly_name; }
         return yaml;
     }
     
@@ -2056,17 +2099,19 @@ class Alert2Create extends LitElement {
             return html`<ha-alert alert-type="error">Loading _topConfigs: ${this._topConfigs.error}</ha-alert>`;
         }
         let entName = `alert2.${this.alertCfg.domain ? this.alertCfg.domain : "[domain]"}_${this.alertCfg.name ? this.alertCfg.name : "[name]"}`;
+        entName = slugify(entName);
         let yaml = this.configToYaml();
         return html`
          <div class="container">
+            <h3>Entity name: <code>${entName}</code></h3>
             <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR}
-                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                 @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} >
                <div slot="help">
-                   some help text
+                   some help text 33
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="name" type=${FieldTypes.STR}
-                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                 @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
@@ -2077,6 +2122,8 @@ class Alert2Create extends LitElement {
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
+
+            <h3>Fire control</h3>
             <alert2-cfg-field .hass=${this.hass} name="condition" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} >
@@ -2089,7 +2136,54 @@ class Alert2Create extends LitElement {
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
+            <div><span style="visibility:hidden">*</span>Threshold <div style="margin-left: 1.5em;">
+               <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
+                     templateType=${TemplateTypes.LIST}
+                     .savedP=${{}} .currP=${this.alertCfg} >
+                  <div slot="help">
+                      some help text
+                  </div></alert2-cfg-field>
+               <alert2-cfg-field .hass=${this.hass} name="hysteresis" type=${FieldTypes.STR}
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
+                     .savedP=${{}} .currP=${this.alertCfg} >
+                  <div slot="help">
+                      some help text
+                  </div></alert2-cfg-field>
+               <alert2-cfg-field .hass=${this.hass} name="maximum" type=${FieldTypes.STR}
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
+                     .savedP=${{}} .currP=${this.alertCfg} >
+                  <div slot="help">
+                      some help text
+                  </div></alert2-cfg-field>
+               <alert2-cfg-field .hass=${this.hass} name="minimum" type=${FieldTypes.STR}
+                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
+                     .savedP=${{}} .currP=${this.alertCfg} >
+                  <div slot="help">
+                      some help text
+                  </div></alert2-cfg-field>
+            </div></div>
+            <alert2-cfg-field .hass=${this.hass} name="delay_on_secs" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="early_start" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+
+            <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="done_message" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
@@ -2133,47 +2227,22 @@ class Alert2Create extends LitElement {
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} >
+               <div slot="help">
+                   some help text
+               </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="annotate_messages" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
-            <alert2-cfg-field .hass=${this.hass} name="early_start" type=${FieldTypes.STR}
-                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
-            <div>Threshold <div style="margin-left: 1em;">
-               <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     templateType=${TemplateTypes.LIST}
-                     .savedP=${{}} .currP=${this.alertCfg} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
-               <alert2-cfg-field .hass=${this.hass} name="hysteresis" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
-               <alert2-cfg-field .hass=${this.hass} name="maximum" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
-               <alert2-cfg-field .hass=${this.hass} name="minimum" type=${FieldTypes.STR}
-                    @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
-            </div></div>
+            <h3>Generator</h3>
             <alert2-cfg-field .hass=${this.hass} name="generator" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
+                  templateType=${TemplateTypes.LIST}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
@@ -2188,8 +2257,9 @@ class Alert2Create extends LitElement {
             <div style="margin-top: 0.5em;"><ha-progress-button .progress=${this._validateInProgress} @click=${this._validate}>Validate</ha-progress-button></div>
             ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
 
-            <h3>Output</h1>
-            <div>Entity name would be: <code>${entName}</code></div>
+            <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
+
+            <h3>Output</h3>
             <div>YAML:</div>
             <pre class="output">${yaml}</pre>
 
