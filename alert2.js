@@ -1588,6 +1588,7 @@ class Alert2CfgField extends LitElement {
         required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
         expanded: { attribute: false },
         renderInfo: { state: true },
+        genResult : { attribute: false },
         //inDefaults: { state: true },
     }
     constructor() {
@@ -1613,10 +1614,12 @@ class Alert2CfgField extends LitElement {
         this.renderInfo = { rendering: true, error: null, result: null };
         let nameToUse = (this.namePrefix? (this.namePrefix+'.') : '') + this.name;
         let retv;
+        //console.log('doRenderTemplate', this.name, this.genResult);
+        let extraVars = this.genResult ? this.genResult.firstElemVars : {};
         try {
             retv = await this.hass.callApi('POST', 'alert2/renderValue',
                                            //{ type: this.templateType, txt: value });
-                                           { txt: value, name: nameToUse });
+                                           { txt: value, name: nameToUse, extraVars: extraVars });
         } catch (err) {
             this.renderInfo = { rendering: false, error: 'http err: ' + JSON.stringify(err),
                                 result: null };
@@ -1634,6 +1637,9 @@ class Alert2CfgField extends LitElement {
                                 result: null };
         } else {
             this.renderInfo = resp;
+            if (this.name == 'generator') {
+                jFireEvent(this, "generator-result", { generatorResult: resp.result });
+            }
         }
     }
     setConfig(config) {
@@ -1645,10 +1651,13 @@ class Alert2CfgField extends LitElement {
             this.focusOnce = true;
         }
         jFireEvent(this, "expand-click", { expanded: this.expanded });
+        // this.renderD() just so we update if, e.g. generator was changed and user is checking out this
+        // particular field to see what the effect was
+        this.renderD(); 
     }
     _change(ev) {
         let value = ev.detail?.value || ev.target.value;
-        console.log('_change', value);
+        //console.log('_change', value);
         let parentP = this.currP;
         if (this.namePrefix) {
             parentP = parentP[this.namePrefix];
@@ -1692,14 +1701,20 @@ class Alert2CfgField extends LitElement {
             if (els[0].nodeName == 'HA-TEXTFIELD') {
                 els[0].focus();
             } else {
-                setTimeout(()=>{
-                    //els[0].focus();
+                let tries = 0;
+                let checkInt = setInterval(()=>{
+                    tries += 1;
                     let subel = els[0].shadowRoot.querySelector('div.cm-content');
                     if (subel) { // code editor might aready have been closed
                         subel.focus();
+                        clearInterval(checkInt);
+                    } else {
+                        if (tries > 15) {
+                            console.warn('ha-code-editor element did not materialize to get focus within ~5s');
+                            clearInterval(checkInt);
+                        }
                     }
-                    console.warn('janky');
-                }, 1000);
+                }, 300);
             }
             //this.addEventListener("focusin", (event) => { console.log('focusin', event); });
             this.focusOnce = false;
@@ -1730,11 +1745,17 @@ class Alert2CfgField extends LitElement {
                                        @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
-                    console.log('list result', this.renderInfo.result);
-                    const maxCount = 5;
-                    let firstOnly = (this.renderInfo.result.length > 5) ? `, showing first ${maxCount}` : '';
+                    let firstOnly = '';
+                    if (this.name == 'generator') {
+                        if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
+                            firstOnly = `showing first ${this.renderInfo.result.list.length}`;
+                        }
+                        renderedStr = JSON.stringify(this.renderInfo.result);
+                    } else {
+                        renderedStr = JSON.stringify(this.renderInfo.result);
+                    }
                     lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
-                    renderedStr = JSON.stringify(this.renderInfo.result.slice(0, maxCount));//   ''+displayStr(this.renderInfo.result.slice(0, maxCount));
+                    console.log('list result', this.renderInfo.result);
                 }
                 editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${value} .readOnly=${false}
                   autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
@@ -1742,7 +1763,7 @@ class Alert2CfgField extends LitElement {
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
-            let renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<pre class="rendered" style="margin-left: 1em;">${renderedStr}</pre></div>`:"";
+            let renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
             if (this.focusOnce) {
                 // I wish we had access to Lit's ref() directive.  Sigh.
                 this.firstFocus(); // async func
@@ -1788,8 +1809,15 @@ class Alert2CfgField extends LitElement {
        .shelp {
           font-size: 0.9em;
        }
+       .shelp > ul {
+          margin-top: 0.1em;
+          margin-bottom: 0;
+       }
        pre {
           margin: 0;
+       }
+       .rendered {
+          font-family: ui-monospace, monospace;
        }
      }
     `;
@@ -1952,17 +1980,6 @@ class Alert2EditDefaults extends LitElement {
     h3:first-of-type {
        margin-top: 0em;
     }
-    .cfield > p {
-        margin-bottom: 0;
-     }
-    .shelp {
-        margin-left: 1em;
-        font-size: 0.9em;
-     }
-     .shelp > ul {
-        margin-top: 0.1em;
-        margin-bottom: 0;
-     }
       `;
 }
 
@@ -1994,6 +2011,7 @@ class Alert2Create extends LitElement {
         _topConfigs: { attribute: false },
         _serverErr: { state: true },
         _validateInProgress: { state: true },
+        _generatorResult: { state: true },
         alertCfg: { state: true },
     }
     constructor() {
@@ -2048,6 +2066,10 @@ class Alert2Create extends LitElement {
         this._serverErr = null;
         this.requestUpdate();
     }
+    _generator_rez(ev) {
+        this._generatorResult = ev.detail?.generatorResult;
+        console.log('_generator_rez', ev.detail, this._generatorResult);
+    }
     configToYaml() {
         let yaml = 'alert2:';
         yaml += '\n  alerts:';
@@ -2090,6 +2112,7 @@ class Alert2Create extends LitElement {
     }
     
     render() {
+        //console.log('render with this._generatorResult=', this._generatorResult);
         if (!this.hass) {
             return html`waiting for hass`;
         }
@@ -2102,24 +2125,49 @@ class Alert2Create extends LitElement {
         let entName = `alert2.${this.alertCfg.domain ? this.alertCfg.domain : "[domain]"}_${this.alertCfg.name ? this.alertCfg.name : "[name]"}`;
         entName = slugify(entName);
         let yaml = this.configToYaml();
+        if (0) {
+            let old = html`
+         <div class="container">
+            <ha-list>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
+                  <span>Condition</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Fires while a condition is satisfied</span></ha-list-item>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
+                  <span>Event</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Fires when triggered</span></ha-list-item>
+              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
+                  <span>Generator</span>
+                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
+                    @change=${this._topRadioClick} ></ha-radio></span>
+                  <span slot="secondary">Use patterns to generate multiple alert entities</span></ha-list-item>
+            </ha-list>
+         </div>
+         `;
+
+        }
+
         return html`
          <div class="container">
             <h3>Entity name: <code>${entName}</code></h3>
             <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change}
-                 .savedP=${{}}  .currP=${this.alertCfg} >
+                 .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text 33
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="name" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change}
-                 .savedP=${{}}  .currP=${this.alertCfg} >
+                 .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="friendly_name" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
@@ -2127,52 +2175,52 @@ class Alert2Create extends LitElement {
             <h3>Fire control</h3>
             <alert2-cfg-field .hass=${this.hass} name="condition" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="trigger" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <div><span style="visibility:hidden">*</span>Threshold <div style="margin-left: 1.5em;">
                <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     templateType=${TemplateTypes.LIST}
+                     templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="hysteresis" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
+                     .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="maximum" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
+                     .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="minimum" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     .savedP=${{}} .currP=${this.alertCfg} >
+                     .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                   <div slot="help">
                       some help text
                   </div></alert2-cfg-field>
             </div></div>
             <alert2-cfg-field .hass=${this.hass} name="delay_on_secs" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="early_start" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
@@ -2180,70 +2228,70 @@ class Alert2Create extends LitElement {
             <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="done_message" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  templateType=${TemplateTypes.LIST}
+                  templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="summary_notifier" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  templateType=${TemplateTypes.LIST}
+                  templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="title" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="target" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="data" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="throttle_fires_per_mins" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="annotate_messages" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
-                  .savedP=${{}} .currP=${this.alertCfg} >
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
             <h3>Generator</h3>
             <alert2-cfg-field .hass=${this.hass} name="generator" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
-                  templateType=${TemplateTypes.LIST}
+                  templateType=${TemplateTypes.LIST} @generator-result=${this._generator_rez}
                   .savedP=${{}} .currP=${this.alertCfg} >
                <div slot="help">
                    some help text
@@ -2266,95 +2314,9 @@ class Alert2Create extends LitElement {
 
 
         `;
-        let foo = html`<div class="subtext">happy</div>`;
-        //let entName = `alert2.${this.alertCfg.domain ? this.alertCfg.domain : "[domain]"}_${this.alertCfg.name ? this.alertCfg.name : "[name]"}`;
-        //let yaml = this.configToYaml();
-        let mdown = html`this is <b>good2</b><ul><li>list1<li>list2</ul>`;
-        return html`
-         <div class="container">
-            <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.BOOL}
-                 .defaultP=${this._topConfigs.rawYaml.defaults}
-                  @expand-click=${this.expandClick}
-                 .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
-            <alert2-cfg-field .hass=${this.hass} name="summary_notifier" type=${FieldTypes.TEMPLATE}
-                 templateType=${TemplateTypes.LIST} .defaultP=${this._topConfigs.rawYaml.defaults}
-                  @expand-click=${this.expandClick}
-                  .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
-
-            <ha-list>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
-                  <span>Condition</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Fires while a condition is satisfied</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
-                  <span>Event</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Fires when triggered</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
-                  <span>Generator</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Use patterns to generate multiple alert entities</span></ha-list-item>
-            </ha-list>
-            <div class="cfield"><p>domain*</p>
-               <ha-textfield .required=${true} type="text" @input=${this._domainChange}></ha-textfield>
-               <div class="shelp">Part of the entity name. Usually the object causing the alert (e.g., garage_door)</div>
-            </div>
-            <div class="cfield"><p>name*</p>
-               <ha-textfield .required=${true} type="text" @input=${this._nameChange}></ha-textfield>
-               <div class="shelp">Part of the entity name. Typically the particular fault occuring (e.g., open_too_long)</div>
-            </div>
-            <div class="cfield"><p>friendly name</p>
-               <ha-textfield .required=${false} type="text" @input=${this._friendlynameChange}></ha-textfield>
-               <div class="shelp">Optional name to display in UI and in notifications instead of entity_id</div>
-            </div>
-            <div class="cfield"><p>Condition*</p>
-               <ha-code-editor mode="jinja2" .hass=${this.hass} .value=${this.conditionTxt} .readOnly=${false}
-                  autofocus autocomplete-entities autocomplete-icons @value-changed=${this._conditionChange} dir="ltr"
-                  linewrap></ha-code-editor>
-               <div class="shelp">This must evaluate to truthy (e.g., "true", "on" or opposites) for an alert to fire. Can be:
-                  <ul><li>Template evaluating to truthy. E.g. <code>{{ states('sensor.my_dev_temp') > 33 }}</code>
-                      <li>entity_name.  E.g. <code>binary_sensor.something_happening</code>
-                  </ul>
-               </div>
-               <div style="display: flex; flex-flow: row; align-items: center; margin-left: 1em;">
-                 ${this.conditionEval.rendering ? html`<ha-circular-progress class="render-spinner"
-                       indeterminate size="small" ></ha-circular-progress>` : 
-                   (this.conditionEval.error != null ? html`<ha-alert alert-type=${"error"}>${this.conditionEval.error}
-                        </ha-alert>` : 
-                   (this.conditionEval.result != null ? html`<div style="margin-right: 1em;">Render result:</div>
-                       <pre class="rendered">${this.conditionEval.result}</pre>`:""))}
-               </div>
-            </div>
-
-            <h3>Output</h1>
-            <div>Entity name would be: <code>${entName}</code></div>
-            <div>YAML:</div>
-            <pre class="output">${yaml}</pre>
-         </div>
-         `;
     }
     
     static styles = css`
-    .cfield > p {
-        margin-bottom: 0;
-     }
-    .shelp {
-        margin-left: 1em;
-        font-size: 0.9em;
-     }
-     .shelp > ul {
-        margin-top: 0.1em;
-        margin-bottom: 0;
-     }
     .container {
         margin-bottom: 1em;
      }
