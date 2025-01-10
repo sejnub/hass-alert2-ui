@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.5.3  (internal 47)';
+const VERSION = 'v1.5.3  (internal 48)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -1591,6 +1591,7 @@ class Alert2CfgField extends LitElement {
         genResult : { attribute: false },
         //inDefaults: { state: true },
     }
+    static shadowRootOptions = {...LitElement.shadowRootOptions, delegatesFocus: true};
     constructor() {
         super();
         this.expanded = false;
@@ -1598,6 +1599,9 @@ class Alert2CfgField extends LitElement {
         this.renderD = debounce(this.doRenderTemplate.bind(this), 750);
         this.renderInfo = { rendering: false, error: null, result: null };
         this.focusOnce = false;
+        this.addEventListener('focus', this._handleFocus);
+        //this.addEventListener("focusin", (event) => { console.log('focusin'); });
+        //this.addEventListener("focusout", (event) => { console.log('focusout'); });
     }
     connectedCallback() {
         super.connectedCallback();
@@ -1611,11 +1615,12 @@ class Alert2CfgField extends LitElement {
             this.renderInfo = { rendering: false, error: null, result: null };
             return;
         }
-        this.renderInfo = { rendering: true, error: null, result: null };
+        this.renderInfo.rendering = true; // = { rendering: true, error: null, result: null };
         let nameToUse = (this.namePrefix? (this.namePrefix+'.') : '') + this.name;
         let retv;
         //console.log('doRenderTemplate', this.name, this.genResult);
         let extraVars = this.genResult ? this.genResult.firstElemVars : {};
+        this.requestUpdate(); // since changed renderInfo
         try {
             retv = await this.hass.callApi('POST', 'alert2/renderValue',
                                            //{ type: this.templateType, txt: value });
@@ -1644,6 +1649,14 @@ class Alert2CfgField extends LitElement {
     }
     setConfig(config) {
         this._cardConfig = config;
+    }
+    _handleFocus(ev) {
+        console.log('_handleFocus', ev.target.nodeName);
+        return true;
+        this.expanded = true;
+        this.focusOnce = true;
+        jFireEvent(this, "expand-click", { expanded: this.expanded });
+        // TODO - should this call renderD()?
     }
     _click(ev) {
         this.expanded = !this.expanded;
@@ -1720,29 +1733,48 @@ class Alert2CfgField extends LitElement {
             this.focusOnce = false;
         }
     }
+    // ha-code-editor uses tab to insert spaces.
+    // We want to recapture tab so browser can use it to switch between input elements
+    _codeKeydown(ev) {
+        if (ev.keyCode === 9) {
+            ev.stopPropagation();
+        }
+        return true;
+    }
     render() {
         if (!this.hass) { return "waiting for hass"; }
         let value = uToE(this.getValue());
         let origValue = uToE(this.savedP[this.name]);
         let unsavedChange = html`<span style=${(value == origValue) ? 'visibility: hidden;':''}>*</span>`;
-        let hasDefault = !!this.defaultP;
+        let hasDefault = this.defaultP && Object.hasOwn(this.defaultP, this.name);
         let defaultValue = hasDefault ? uToE(this.defaultP[this.name]) : '';
         let finalValue = (hasDefault && value == '') ? defaultValue : value;
         
+        let editElem;
+        if (this.type == FieldTypes.STR) {
+            editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value} autofocus
+                                       @input=${this._change} ></ha-textfield>`;
+        } else if (this.type == FieldTypes.FLOAT) {
+            editElem = html`<ha-textfield .required=${this.required} type="number" .value=${value} autofocus
+                                       @input=${this._change} ></ha-textfield>`;
+        } else if (this.type == FieldTypes.BOOL) {
+            editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value} autofocus
+                                       @input=${this._change} ></ha-textfield>`;
+        } else if (this.type == FieldTypes.TEMPLATE) {
+            editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${value} .readOnly=${false}
+                  autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
+                  linewrap style="display: block; min-width: 10em;"
+                   @keydown=${{handleEvent: (ev) => this._codeKeydown(ev), capture: true}}
+                   ></ha-code-editor>`;
+        }
+        let extraHtml;
         if (this.expanded) {
-            let editElem;
             //let renderHtml = '';
             let renderedStr = ''+displayStr(this.renderInfo.result);
             let lenStr = '';
             if (this.type == FieldTypes.STR) {
-                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value}
-                                       @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.FLOAT) {
-                editElem = html`<ha-textfield .required=${this.required} type="number" .value=${value}
-                                       @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.BOOL) {
-                editElem = html`<ha-textfield .required=${this.required} type="text" .value=${value}
-                                       @input=${this._change} ></ha-textfield>`;
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
                     let firstOnly = '';
@@ -1757,9 +1789,6 @@ class Alert2CfgField extends LitElement {
                     lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
                     console.log('list result', this.renderInfo.result);
                 }
-                editElem = html`<ha-code-editor mode="jinja2" .hass=${this.hass} .value=${value} .readOnly=${false}
-                  autofocus autocomplete-entities autocomplete-icons @value-changed=${this._change} dir="ltr"
-                  linewrap ></ha-code-editor>`;
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
@@ -1768,38 +1797,42 @@ class Alert2CfgField extends LitElement {
                 // I wish we had access to Lit's ref() directive.  Sigh.
                 this.firstFocus(); // async func
             }
-            return html`
-               <div class="cfield">
-                 <div class="name" @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
-                 <div style="display: flex; flex-flow: column;">
-                    <div class="avalue">${editElem}</div>
-                    ${this.renderInfo.rendering ?
-                        html`<ha-circular-progress class="render-spinner" indeterminate size="small" ></ha-circular-progress>` : 
-                        this.renderInfo.error != null ?
-                            html`<ha-alert alert-type=${"warning"}>${this.renderInfo.error}</ha-alert>` : ""}
+            extraHtml = html`
                     <div style="margin-left: 1em;">
                       ${renderHtml}
-                      ${hasDefault ? html`<div>Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
                       <slot name="help" class="shelp"></slot>
                     </div>
-                 </div>
-               </div>`;
+               `;
         } else {
-            let x = html`
-               <div class="cfield" @click=${this._click}>
-                 <div class="name">${unsavedChange}${this.name}${this.required ? "*":""}:</div>
-                 ${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
-                 <code class="avalue">${displayStr(finalValue)}</code>
-               </div>`;
-            return x;
+            extraHtml = html`
+               `;
         }
-
+        // Final value combinbg default as inputted value
+        //<code class="avalue">${displayStr(finalValue)}</code>
+        //
+        // vertical error bar
+        //${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
+        //console.log(this.name, 'default', defaultValue, typeof(defaultValue));
+        return html`<div class="cfield">
+                      <div class="name" @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
+                      <div style="display: flex; flex-flow: column;">
+                      <div class="avalue">${editElem}</div>
+                      <div>
+                         ${this.renderInfo.rendering ?
+                            html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;" ></ha-circular-progress>` : ''}
+                         ${this.renderInfo.error != null ?
+                            html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
+                      ${hasDefault ? html`<div>Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
+                      </div>
+                      ${extraHtml}
+                    </div>`;
     }
     static styles = css`
        .cfield {
           display: flex;
           flex-flow: row wrap;
           align-items: center;
+          margin-bottom: 1em;
        }
        .name {
           margin-right: 1em;
@@ -1993,7 +2026,7 @@ function yamlEscape(astr, removeNewline=true) {
     }
 }
 function hasJinjaTempl(astr) {
-    const format = /{{|{%|{#/;
+    const format = /{{|}}|{%|%}|{#|#}/;
     return format.test(astr);
 }
 function slugify(str) {
@@ -2010,7 +2043,7 @@ class Alert2Create extends LitElement {
         //topType: { state: true },
         _topConfigs: { attribute: false },
         _serverErr: { state: true },
-        _validateInProgress: { state: true },
+        _opInProgress: { state: true },
         _generatorResult: { state: true },
         alertCfg: { state: true },
     }
@@ -2018,6 +2051,7 @@ class Alert2Create extends LitElement {
         super();
         //this.topType = TopTypes.COND;
         this.alertCfg = {};
+        this._opInProgress = { op: '', inProgress: false };
     }
     setConfig(config) {
         this._cardConfig = config;
@@ -2036,21 +2070,28 @@ class Alert2Create extends LitElement {
     expandClick(ev) {
         closeOtherExpanded(this, ev);
     }
-    async _validate(ev) {
+    async _validate(ev) { await this.doOp('validate', ev); }
+    async _create(ev) { await this.doOp('create', ev); }
+    async _update(ev) { await this.doOp('update', ev); }
+    async doOp(opName, ev) {
         let abutton = ev.target;
-        this._validateInProgress = true;
+        if (this._opInProgress.inProgress) {
+            return;
+        }
+        this._opInProgress = { op: opName, inProgress: true };
         let rez;
-        console.log('validate of', this.alertCfg);
+        console.log(opName, 'of', this.alertCfg);
         try {
-            rez = await this.hass.callApi('POST', 'alert2/manageAlert',
-                                          { validate: this.alertCfg });
+            let obj = {};
+            obj[opName] = this.alertCfg;
+            rez = await this.hass.callApi('POST', 'alert2/manageAlert', obj);
         } catch (err) {
-            this._validateInProgress = false;
+            this._opInProgress.inProgress = false;
             abutton.actionError();
             this._serverErr = "error: " + err.message;
             return;
         }
-        this._validateInProgress = false;
+        this._opInProgress.inProgress = false;
         if (rez.error) {
             abutton.actionError();
             this._serverErr = "error: " + rez.error;
@@ -2152,20 +2193,21 @@ class Alert2Create extends LitElement {
 
         return html`
          <div class="container">
-            <h3>Entity name: <code>${entName}</code></h3>
-            <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR}
+         <div>
+            <h3>Entity name</h3>
+            <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text 33
                </div></alert2-cfg-field>
-            <alert2-cfg-field .hass=${this.hass} name="name" type=${FieldTypes.STR}
+            <alert2-cfg-field .hass=${this.hass} name="name" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
-            <alert2-cfg-field .hass=${this.hass} name="friendly_name" type=${FieldTypes.TEMPLATE}
+            <alert2-cfg-field .hass=${this.hass} name="friendly_name" type=${FieldTypes.TEMPLATE} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">
@@ -2302,23 +2344,34 @@ class Alert2Create extends LitElement {
                <div slot="help">
                    some help text
                </div></alert2-cfg-field>
-
-            <div style="margin-top: 0.5em;"><ha-progress-button .progress=${this._validateInProgress} @click=${this._validate}>Validate</ha-progress-button></div>
-            ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
-
-            <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
-
+          </div>
+          <div>
             <h3>Output</h3>
+             <div>Entity name: <code>${entName}</code></div>
             <div>YAML:</div>
             <pre class="output">${yaml}</pre>
 
+            <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
 
+            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._validate}
+                 .progress=${this._opInProgress.op=='validate'&&this._opInProgress.inProgress}>Validate</ha-progress-button></div>
+            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._create}
+                 .progress=${this._opInProgress.op=='create'&&this._opInProgress.inProgress}>Create</ha-progress-button></div>
+            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._update}
+                 .progress=${this._opInProgress.op=='update'&&this._opInProgress.inProgress}>Update</ha-progress-button></div>
+            ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
+
+
+         </div>
+      </div>
         `;
     }
     
     static styles = css`
     .container {
         margin-bottom: 1em;
+        display: flex;
+        flex-flow: row wrap;
      }
      .output {
         background-color: var(--secondary-background-color);
