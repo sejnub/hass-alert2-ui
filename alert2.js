@@ -1467,24 +1467,59 @@ class Alert2Manager extends LitElement {
         open: {},
         large: {reflect: true, type: Boolean},
         _hass: { state: true },
+        _searchTxt: { state: true },
+        _searchStatus: { state: true },
         //hass: { attribute: false },
     }
     constructor() {
         super();
         this._hass = null;
+        this._config = null;
+        this.fetchD = debounce(this.updateSearch.bind(this), 750);
+        this._searchTxt = '';
+        this._searchStatus = { inProgress: false, rez: '', error: null };
     }
     set hass(newHass) {
         const oldHass = this._hass;
         this._hass = newHass;
-        this._config = null;
     }
     setConfig(config) {
         this._config = config;
+    }
+    connectedCallback() {
+        super.connectedCallback();
+        this.fetchD(); // update starts in 750ms
+    }
+    async updateSearch() {
+        this._searchStatus.inProgress = true;
+        this.requestUpdate();
+        let retv = null;
+        try {
+            retv = await this._hass.callApi('POST', 'alert2/manageAlert',
+                                            { search: { str: this._searchTxt } });
+        } catch (err) {
+            console.error('search error', err);
+            this._searchStatus = { inProgress: false, error: 'http err: ' + JSON.stringify(err),
+                                rez: null };
+            return;
+        }
+        this._searchStatus = { inProgress: false, error: null, rez: retv };
+    }
+    _change(ev) {
+        let value = ev.detail?.value || ev.target.value;
+        this._searchTxt = value;
+        this._searchStatus.error = null;
+        this.requestUpdate();
     }
     render() {
         if (!this._hass) {
             return html`<div>Loading.. waiting for hass to load</div>`;
         }
+        console.log(this._searchStatus);
+        let errorHtml = this._searchStatus.error ?
+            html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this._searchStatus.error}</ha-alert>` : "";
+        let resultHtml = this._searchStatus.rez ?
+            html`<pre>${JSON.stringify(this._searchStatus.rez)}</pre>` : '';
         return html`<ha-card>
             <h1 class="card-header"><div class="name">Alert2 Manager</div></h1>
             <div class="card-content">
@@ -1493,6 +1528,14 @@ class Alert2Manager extends LitElement {
                     @click=${this.editDefaults}>Edit defaults</ha-progress-button>
                   <ha-progress-button .progress=${this._ackAllInProgress}
                     @click=${this.createNew}>Create new alert</ha-progress-button>
+                  <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
+              </div><div>
+                  Search: 
+                  <ha-textfield type="text" .value=${this._searchTxt} autofocus @input=${this._change} ></ha-textfield>
+                  Results:
+                  ${this._searchStatus.inProgress ? html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;"></ha-circular-progress>` : ''}
+                  ${errorHtml}
+                  ${resultHtml}
               </div>
             </div>
           </ha-card>`;
@@ -1589,6 +1632,7 @@ class Alert2CfgField extends LitElement {
         expanded: { attribute: false },
         renderInfo: { state: true },
         genResult : { attribute: false },
+        showRendered: { state: true },
         //inDefaults: { state: true },
     }
     static shadowRootOptions = {...LitElement.shadowRootOptions, delegatesFocus: true};
@@ -1600,6 +1644,7 @@ class Alert2CfgField extends LitElement {
         this.renderInfo = { rendering: false, error: null, result: null };
         this.focusOnce = false;
         this.addEventListener('focus', this._handleFocus);
+        this.showRendered = false;
         //this.addEventListener("focusin", (event) => { console.log('focusin'); });
         //this.addEventListener("focusout", (event) => { console.log('focusout'); });
     }
@@ -1669,6 +1714,7 @@ class Alert2CfgField extends LitElement {
         this.renderD(); 
     }
     _change(ev) {
+        this.showRendered = true;
         let value = ev.detail?.value || ev.target.value;
         //console.log('_change', value);
         let parentP = this.currP;
@@ -1767,9 +1813,16 @@ class Alert2CfgField extends LitElement {
                    @keydown=${{handleEvent: (ev) => this._codeKeydown(ev), capture: true}}
                    ></ha-code-editor>`;
         }
-        let extraHtml;
+        if (this.focusOnce) {
+            // I wish we had access to Lit's ref() directive.  Sigh.
+            this.firstFocus(); // async func
+        }
+        let renderHtml = '';
+        let helpHtml = '';
         if (this.expanded) {
-            //let renderHtml = '';
+            helpHtml = `<slot name="help" class="shelp"></slot>`;
+        }
+        if (this.showRendered) {
             let renderedStr = ''+displayStr(this.renderInfo.result);
             let lenStr = '';
             if (this.type == FieldTypes.STR) {
@@ -1792,20 +1845,7 @@ class Alert2CfgField extends LitElement {
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
-            let renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
-            if (this.focusOnce) {
-                // I wish we had access to Lit's ref() directive.  Sigh.
-                this.firstFocus(); // async func
-            }
-            extraHtml = html`
-                    <div style="margin-left: 1em;">
-                      ${renderHtml}
-                      <slot name="help" class="shelp"></slot>
-                    </div>
-               `;
-        } else {
-            extraHtml = html`
-               `;
+            renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
         }
         // Final value combinbg default as inputted value
         //<code class="avalue">${displayStr(finalValue)}</code>
@@ -1814,17 +1854,21 @@ class Alert2CfgField extends LitElement {
         //${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
         //console.log(this.name, 'default', defaultValue, typeof(defaultValue));
         return html`<div class="cfield">
-                      <div class="name" @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
-                      <div style="display: flex; flex-flow: column;">
-                      <div class="avalue">${editElem}</div>
-                      <div>
-                         ${this.renderInfo.rendering ?
-                            html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;" ></ha-circular-progress>` : ''}
-                         ${this.renderInfo.error != null ?
-                            html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
-                      ${hasDefault ? html`<div>Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
+                      <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
+                      <div class="editfs" style="display: flex; flex-flow: column;">
+                         <div class="avalue">${editElem}</div>
+                         <div>
+                            ${this.renderInfo.rendering ?
+                              html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;" ></ha-circular-progress>` : ''}
+                            ${this.renderInfo.error != null ?
+                              html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
+                            ${hasDefault ? html`<div>Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
+                         </div>
+                         ${renderHtml}
+                         <div style="margin-left: 1em;">
+                            ${helpHtml}
+                         </div>
                       </div>
-                      ${extraHtml}
                     </div>`;
     }
     static styles = css`
@@ -1834,10 +1878,18 @@ class Alert2CfgField extends LitElement {
           align-items: center;
           margin-bottom: 1em;
        }
-       .name {
+       .name, .threshname {
           margin-right: 1em;
           cursor: pointer;
-          min-width: 14em;
+          /*min-width: 10em;*/
+          flex: 0 0 14em;
+       }
+       .threshname {
+          flex: 0 0 12.5em;
+       }
+       .editfs {
+          flex: 1 1 30em;
+          /*max-width: 50em;*/
        }
        .shelp {
           font-size: 0.9em;
@@ -2166,34 +2218,10 @@ class Alert2Create extends LitElement {
         let entName = `alert2.${this.alertCfg.domain ? this.alertCfg.domain : "[domain]"}_${this.alertCfg.name ? this.alertCfg.name : "[name]"}`;
         entName = slugify(entName);
         let yaml = this.configToYaml();
-        if (0) {
-            let old = html`
-         <div class="container">
-            <ha-list>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.COND, ev) }}>
-                  <span>Condition</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.COND} .value=${TopTypes.COND}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Fires while a condition is satisfied</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.EVENT, ev) }}>
-                  <span>Event</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.EVENT} .value=${TopTypes.EVENT}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Fires when triggered</span></ha-list-item>
-              <ha-list-item twoline graphic="control" @click=${(ev)=>{ this._topClick(TopTypes.GENERATOR, ev) }}>
-                  <span>Generator</span>
-                  <span slot="graphic"><ha-radio .checked=${this.topType==TopTypes.GENERATOR} .value=${TopTypes.GENERATOR}
-                    @change=${this._topRadioClick} ></ha-radio></span>
-                  <span slot="secondary">Use patterns to generate multiple alert entities</span></ha-list-item>
-            </ha-list>
-         </div>
-         `;
-
-        }
 
         return html`
          <div class="container">
-         <div>
+         <div class="ifields">
             <h3>Entity name</h3>
             <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
@@ -2345,9 +2373,9 @@ class Alert2Create extends LitElement {
                    some help text
                </div></alert2-cfg-field>
           </div>
-          <div>
+          <div class="doutput">
             <h3>Output</h3>
-             <div>Entity name: <code>${entName}</code></div>
+            <div style="margin-bottom: 1em;">Entity name: <code>${entName}</code></div>
             <div>YAML:</div>
             <pre class="output">${yaml}</pre>
 
@@ -2372,10 +2400,18 @@ class Alert2Create extends LitElement {
         margin-bottom: 1em;
         display: flex;
         flex-flow: row wrap;
+        gap: 1em;
+     }
+     .ifields {
+        flex: 1 1 45em;
+     }
+     .doutput {
+        flex: 1 1 35em;
      }
      .output {
         background-color: var(--secondary-background-color);
         padding: 8px;
+        whitespace: pre-wrap;
      }
       `;
     _topRadioClick(ev) {
