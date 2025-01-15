@@ -1510,6 +1510,14 @@ class Alert2Manager extends LitElement {
         this._searchTxt = value;
         this._searchStatus.error = null;
         this.requestUpdate();
+        this.fetchD();
+    }
+    // el has { id, domain, name }
+    entClick(ev, el) {
+        let innerElem = document.createElement('alert2-create');
+        innerElem.hass = this._hass;
+        innerElem.entInfo = el;
+        jCreateDialog(this, 'Edit alert', innerElem);
     }
     render() {
         if (!this._hass) {
@@ -1518,21 +1526,24 @@ class Alert2Manager extends LitElement {
         console.log(this._searchStatus);
         let errorHtml = this._searchStatus.error ?
             html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this._searchStatus.error}</ha-alert>` : "";
-        let resultHtml = this._searchStatus.rez ?
-            html`<pre>${JSON.stringify(this._searchStatus.rez)}</pre>` : '';
+        let resultHtml = '';
+        if (this._searchStatus.rez) {
+            resultHtml = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+        }
         return html`<ha-card>
             <h1 class="card-header"><div class="name">Alert2 Manager</div></h1>
             <div class="card-content">
-              <div style="display:flex; align-items: center; margin-bottom: 1em;">
+              <div style="display:flex; align-items: center; margin-bottom: 0.3em;">
                   <ha-progress-button .progress=${this._ackAllInProgress}
                     @click=${this.editDefaults}>Edit defaults</ha-progress-button>
                   <ha-progress-button .progress=${this._ackAllInProgress}
                     @click=${this.createNew}>Create new alert</ha-progress-button>
-                  <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
-              </div><div>
+              </div>
+              <div style="margin-bottom: 1em;">
                   Search: 
                   <ha-textfield type="text" .value=${this._searchTxt} autofocus @input=${this._change} ></ha-textfield>
-                  Results:
+              </div>
+              <div>
                   ${this._searchStatus.inProgress ? html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;"></ha-circular-progress>` : ''}
                   ${errorHtml}
                   ${resultHtml}
@@ -1572,6 +1583,13 @@ class Alert2Manager extends LitElement {
         border-bottom-right-radius: var(--ha-card-border-radius, 12px);
         margin-top: -16px;
         overflow: hidden;
+      }
+      .anent {
+          cursor: pointer;
+          padding: 0.7em 0 0.7em 0.7em;
+      }
+      .anent:hover {
+          background-color: var(--secondary-background-color);
       }
     `;
 };
@@ -2092,6 +2110,7 @@ function slugify(str) {
 class Alert2Create extends LitElement {
     static properties = {
         hass: { attribute: false },
+        entInfo: { attribute: false },
         //topType: { state: true },
         _topConfigs: { attribute: false },
         _serverErr: { state: true },
@@ -2118,6 +2137,15 @@ class Alert2Create extends LitElement {
         } catch (err) {
             this._topConfigs = { error: 'http err: ' + JSON.stringify(err) };
         }
+        if (this.entInfo) {
+            try {
+                this.alertCfg = await this.hass.callApi('POST', 'alert2/manageAlert',
+                                                        { load: { domain: this.entInfo.domain, name: this.entInfo.name } });
+                console.log('initialzing alertCfg to ', this.alertCfg);
+            } catch (err) {
+                this._serverErr = { error: 'http err: ' + JSON.stringify(err) };
+            }
+        }
     }
     expandClick(ev) {
         closeOtherExpanded(this, ev);
@@ -2139,6 +2167,7 @@ class Alert2Create extends LitElement {
             rez = await this.hass.callApi('POST', 'alert2/manageAlert', obj);
         } catch (err) {
             this._opInProgress.inProgress = false;
+            this.requestUpdate();
             abutton.actionError();
             this._serverErr = "error: " + err.message;
             return;
@@ -2150,6 +2179,7 @@ class Alert2Create extends LitElement {
             return;
         }
         abutton.actionSuccess();
+        this.requestUpdate();
     }
     _change(ev) {
         //console.log('editor _change');
