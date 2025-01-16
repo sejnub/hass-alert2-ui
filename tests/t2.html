@@ -85,10 +85,12 @@
                  return er;
              }};
          }
+         let testDiv;
          window.addEventListener('DOMContentLoaded', async function() {
              await loadScript('./ha-lib.js', 'module');
              await loadScript('../alert2.js');
-             await startTest(doTest, isEdit=true);
+             testDiv = document.querySelector('#testDiv');
+             await startTest(doTest1);
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -129,23 +131,53 @@
                                     'fires_since_last_notify': 0 },
                       entity_id: 'alert2.'+name };
          }
-         async function startTest(afunc, isCreate=false) {
-             let testStatusEl = document.querySelector('#testStatus');
-             let testDiv = document.querySelector('#testDiv');
-             testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
-             let newHass = {
-                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
+         async function callApi(type, method, opts) {
+             const settings = {
+                 method: type,
+                 headers: {
+                     Accept: 'application/json',
+                     'Content-Type': 'application/json',
+                 },
+                 body: JSON.stringify(opts),
              };
-             let ao = document.createElement(isCreate ? 'alert2-edit-defaults' :  'alert2-create');
+             try {
+                 const fetchResponse = await fetch(`http://localhost:8000/${method}`, settings);
+                 const data = await fetchResponse.json();
+                 console.log('got response to', method, opts, '   as   ', data);
+                 return data;
+             } catch (e) {
+                 console.error(method, opts, e);
+                 return e;
+             }
+         }
+         async function initTest(eName, yamlCfg) {
+             let cfg = { 'alert2': {
+                 'defaults': {}
+             } }
+             let rez = await callApi('POST', 'alert2test/setCfg', cfg);
+             console.log('setCfg of ', cfg);
+             let newHass = {
+                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
+                 callApi: callApi,
+             };
+             let ao = document.createElement(eName); // ? 'alert2-edit-defaults' :  'alert2-create');
+             console.log('ao is ', ao, eName);
              ao.hass = newHass;
              testDiv.appendChild(ao);
              await sleepMs(5);
-             await afunc(ao, newHass);
+             ao.connectedCallback();
+             return ao;
+         }
+         async function startTest(afunc) {
+             let testStatusEl = document.querySelector('#testStatus');
+             testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
+             
+             await afunc();
              //ao.remove();
              testStatusEl.innerHTML = `Test: Done ${afunc.name}`;
          }
-         async function doTest(ao, newHass) {
-             
+         async function doTest1() {
+             let ao = await initTest('alert2-edit-defaults');
          }
         </script>
     </head>

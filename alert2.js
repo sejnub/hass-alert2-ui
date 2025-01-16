@@ -1517,6 +1517,7 @@ class Alert2Manager extends LitElement {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
         innerElem.entInfo = el;
+        innerElem.didSomethingCb = ()=>{ this.fetchD(); };
         jCreateDialog(this, 'Edit alert', innerElem);
     }
     render() {
@@ -1554,6 +1555,7 @@ class Alert2Manager extends LitElement {
     async createNew(ev) {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
+        innerElem.didSomethingCb = ()=>{ this.fetchD(); };
         jCreateDialog(this, 'a new alert?', innerElem);
     }
     async editDefaults(ev) {
@@ -1960,12 +1962,14 @@ class Alert2EditDefaults extends LitElement {
         this.refresh();
     }
     async refresh() {
+        console.log('doing refresh');
         let retv;
         try {
             this._topConfigs = await this.hass.callApi('POST', 'alert2/loadTopConfig', {});
             this._topConfigs.origRawUi = JSON.parse(JSON.stringify(this._topConfigs.rawUi));
         } catch (err) {
             this._serverErr = 'http err: ' + JSON.stringify(err);
+            console.error('alert2/loadTopConfig: http err', err);
             return;
         }
         console.log('got topConfig', this._topConfigs);
@@ -2007,7 +2011,12 @@ class Alert2EditDefaults extends LitElement {
     }
     render() {
         if (!this.hass) { return "waiting for hass"; }
-        if (!this._topConfigs) { return "waiting for _topConfigs"; }
+        if (!this._topConfigs) {
+            if (this._serverErr) {
+                return html`<div>${this._serverErr}</div>`;
+            }
+            return "waiting for _topConfigs";
+        }
         return html`
          <div class="container" >
             <h3>Default alert parameters</h3>
@@ -2111,6 +2120,8 @@ class Alert2Create extends LitElement {
     static properties = {
         hass: { attribute: false },
         entInfo: { attribute: false },
+        // TODO - really only need the CB when create/delete/update, not on validate.
+        didSomethingCb: { attribute: false },
         //topType: { state: true },
         _topConfigs: { attribute: false },
         _serverErr: { state: true },
@@ -2153,6 +2164,7 @@ class Alert2Create extends LitElement {
     async _validate(ev) { await this.doOp('validate', ev); }
     async _create(ev) { await this.doOp('create', ev); }
     async _update(ev) { await this.doOp('update', ev); }
+    async _delete(ev) { await this.doOp('delete', ev); }
     async doOp(opName, ev) {
         let abutton = ev.target;
         if (this._opInProgress.inProgress) {
@@ -2180,6 +2192,7 @@ class Alert2Create extends LitElement {
         }
         abutton.actionSuccess();
         this.requestUpdate();
+        this.didSomethingCb();
     }
     _change(ev) {
         //console.log('editor _change');
@@ -2417,6 +2430,8 @@ class Alert2Create extends LitElement {
                  .progress=${this._opInProgress.op=='create'&&this._opInProgress.inProgress}>Create</ha-progress-button></div>
             <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._update}
                  .progress=${this._opInProgress.op=='update'&&this._opInProgress.inProgress}>Update</ha-progress-button></div>
+            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._delete}
+                 .progress=${this._opInProgress.op=='delete'&&this._opInProgress.inProgress}>Delete</ha-progress-button></div>
             ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
 
 
