@@ -591,7 +591,7 @@ function formatLogDate(idate) {
     function z3(num) { return ('00'+num).slice(-3); }
     let adate = new Date(Date.parse(idate));
     // e.g., 2024/12/20 13:05:15.123  (local time)
-    return `${adate.getFullYear()}/${z2(adate.getMonth())}/${z2(adate.getDate())} ${z2(adate.getHours())}:${z2(adate.getMinutes())}:${z2(adate.getSeconds())}.${z3(adate.getMilliseconds())}`
+    return `${adate.getFullYear()}/${z2(adate.getMonth()+1)}/${z2(adate.getDate())} ${z2(adate.getHours())}:${z2(adate.getMinutes())}:${z2(adate.getSeconds())}.${z3(adate.getMilliseconds())}`
 }
 
 function agoStr(adate, longnames) {
