@@ -127,6 +127,8 @@ class HaSlider extends MdSlider {
                  this._result = null;
              }
              render() {
+                 const mdiCheckBold = "M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z";
+                 const mdiAlertOctagram = "M2.2,16.06L3.88,12L2.2,7.94L6.26,6.26L7.94,2.2L12,3.88L16.06,2.2L17.74,6.26L21.8,7.94L20.12,12L21.8,16.06L17.74,17.74L16.06,21.8L12,20.12L7.94,21.8L6.26,17.74L2.2,16.06M13,17V15H11V17H13M13,13V7H11V13H13Z";
                  const overlay = this._result || this.progress;
                  return html`
                      <mwc-button
@@ -563,14 +565,14 @@ class HaSlider extends MdSlider {
     class HaCodeEditor extends LitElement {
         static properties = {
             hass: { attribute: false },
-            value: { state: true }
+            value: { attribute: false }
         }
         constructor() {
             super();
             this.value = null;
         }
         render() {
-            return html`<ha-textfield label="foo" .required=${true} type="text" helperpersistent=""  .helper=${"foo bar"} .value=${this.value} @input=${this._vChange}></ha-textfield>`;
+            return html`<ha-textfield label="some code" .required=${true} type="text" helperpersistent=""  .helper=${"fake code helper"} .value=${this.value} @input=${this._vChange}></ha-textfield>`;
         }
         _vChange(ev) {
             let value = ev.detail?.value || ev.target.value;

@@ -1,6 +1,11 @@
-<html>
-    <!-- python3 -m http.server 8000 -d ..
-         then load http://localhost:8000/tests/t2.html
+<!DOCTYPE html>
+<html lang="en">
+    <!-- 
+         Run server with (from the Alert2 repo):
+             venv/bin/pytest tests/test_server.py
+         View page at:
+             http://localhost:50005/jtest/tests/t2.html
+         
     -->
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -90,7 +95,10 @@
              await loadScript('./ha-lib.js', 'module');
              await loadScript('../alert2.js');
              testDiv = document.querySelector('#testDiv');
-             await startTest(doTest1);
+             let alert2Tools = customElements.get('alert2-tools');
+             alert2Tools.debounceMs = 1;
+             //jassert(await startTest(doTest1));
+             jassert(await startTest(doTest2));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -102,6 +110,28 @@
          function jasserteq(a, b) {
              if (a !== b) {
                  throw new Error(`assert failed "${a}" != "${b}"`);
+             }
+         }
+         function testObjeq(obj1, obj2) {
+             if (obj1 === obj2) return true;
+             if (typeof obj1 !== 'object' || obj1 === null || 
+                 typeof obj2 !== 'object' || obj2 === null) {
+                 return false;
+             }
+             const keys1 = Object.keys(obj1);
+             const keys2 = Object.keys(obj2);
+             if (keys1.length !== keys2.length) return false;
+             for (const key of keys1) {
+                 if (!keys2.includes(key) || !testObjeq(obj1[key], obj2[key])) {
+                     return false;
+                 }
+             }
+             return true;
+         }
+         function jassertObjeq(a, b) {
+             if (!testObjeq(a, b)) {
+                 console.error(a, '  !=  ', b);
+                 jassert(false);
              }
          }
          function sleepMs(ms) {
@@ -141,7 +171,7 @@
                  body: JSON.stringify(opts),
              };
              try {
-                 const fetchResponse = await fetch(`http://localhost:8000/${method}`, settings);
+                 const fetchResponse = await fetch(`http://localhost:50005/api/${method}`, settings);
                  const data = await fetchResponse.json();
                  console.log('got response to', method, opts, '   as   ', data);
                  return data;
@@ -151,33 +181,359 @@
              }
          }
          async function initTest(eName, yamlCfg) {
-             let cfg = { 'alert2': {
-                 'defaults': {}
-             } }
-             let rez = await callApi('POST', 'alert2test/setCfg', cfg);
-             console.log('setCfg of ', cfg);
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
                  callApi: callApi,
              };
-             let ao = document.createElement(eName); // ? 'alert2-edit-defaults' :  'alert2-create');
+             let ao = document.createElement(eName);
              console.log('ao is ', ao, eName);
              ao.hass = newHass;
              testDiv.appendChild(ao);
-             await sleepMs(5);
-             ao.connectedCallback();
-             return ao;
+             let c = 0;
+             while (true) {
+                 await sleepMs(10);
+                 //if (ao.innerHTML) { break; }
+                 let tt = ao.shadowRoot.querySelector(`alert2-cfg-field[name="notifier"]`);
+                 if (tt) { break; }
+                 console.log('no ao :(...', !!tt);
+                 jassert(c < 50);
+                 c++;
+             }
+             let z = createHelpers(ao);
+             z.ao = ao;
+             return z;
          }
          async function startTest(afunc) {
              let testStatusEl = document.querySelector('#testStatus');
+
+             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset'} );
+             if (!testObjeq(tobj, {})) {
+                 testStatusEl.innerHTML = `Test: Server data not empty. Needs restart`;
+                 return false;
+             }
              testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
-             
              await afunc();
              //ao.remove();
              testStatusEl.innerHTML = `Test: Done ${afunc.name}`;
+             return true;
+         }
+         async function waitDone(abutton) {
+             await sleepMs(10);
+             while (true) {
+                 if (!abutton.progress) { return; }
+                 await sleepMs(50);
+             }
+         }
+         function createHelpers(ao) {
+             function checkField(aname, val) {
+                 let currP = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`).currP;
+                 //console.log('checkField', aname, JSON.stringify(currP));
+                 jassert(currP);
+                 if (val === null) {
+                     jassert(!Object.hasOwn(currP, aname));
+                 } else {
+                     jasserteq(currP[aname], val);
+                 }
+             }
+             async function checkRender(aname, aregex) {
+                 let cf = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`);
+                 await sleepMs(3);
+                 while (true) {
+                     let jj = cf.shadowRoot.querySelector('ha-circular-progress');
+                     if (!jj) { break; }
+                     await sleepMs(20);
+                 }
+                 await sleepMs(3);
+                 let ri = cf.shadowRoot.querySelector('div.renderInfo');
+                 jassert(ri);
+                 let inner = ri.innerHTML;
+                 jassert(inner);
+                 let txt = ri.textContent;
+                 let idx = txt.search(aregex);
+                 //console.log('Render to be tested is:', inner, aregex, idx);
+                 //console.log('Render3 to be tested is:', ri.textContent);
+                 if (! (idx >= 0)) {
+                     console.log(`Did not find "${aregex}" in ${txt}`);
+                     jassert(false);
+                 }
+                 //if (!aregex.source.includes('alert') && inner.includes('alert')) {
+                 //    console.log(`Unexpected alert found in ${inner}`);
+                 //    jassert(false);
+                 // }
+             }
+             async function setField(aname, val) {
+                 let cf = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`);
+                 let jj = cf.shadowRoot.querySelector('ha-textfield');
+                 if (jj) {
+                     if (val == '') {
+                         jj.value = val;
+                     }
+                     jFireEvent(jj, 'input', { value: val });
+                     //jj.value = val;
+                 } else {
+                     if (val == '') {
+                         //jassert(false);
+                         let cc = 100;
+                         if (0) {
+                             jj = cf.shadowRoot.querySelector('ha-code-editor')
+                                    .shadowRoot.querySelector('ha-textfield')
+                                    .shadowRoot.querySelector('input');
+                             jassert(jj);
+                             jj.focus();
+                             await sleepMs(1);
+                         } else {
+                             jj = cf.shadowRoot.querySelector('ha-code-editor');
+                         }
+                         jj.value = val;
+                         jFireEvent(jj, 'value-changed', { value: val });
+                         while (cc-- > 0) {
+                             await sleepMs(1);
+                             //jFireEvent(jj, 'input', { value: val });
+                             //jFireEvent(jj, 'change', { value: val });
+                             await sleepMs(1);
+                             if (jj.value == val &&
+                                 !Object.hasOwn(cf.currP, aname)) {
+                                 break;
+                             }
+                             await sleepMs(10);
+                             console.log('    waiting for val to become empty', jj.value, val, cf.currP[aname]);
+                         }
+                     } else {
+                         jj = cf.shadowRoot.querySelector('ha-code-editor');
+                         jFireEvent(jj, 'value-changed', { value: val });
+                     }
+                 }
+                 await sleepMs(2);
+                 console.log('setting', aname, val, cf.currP[aname]);
+                 if (val == '') {
+                     jassert(!Object.hasOwn(cf.currP, aname));
+                 } else {
+                     jasserteq(cf.currP[aname], val);
+                 }
+             }
+             return {
+                 checkField: checkField,
+                 checkRender: checkRender,
+                 setField: setField,
+             };
          }
          async function doTest1() {
-             let ao = await initTest('alert2-edit-defaults');
+             let z = await initTest('alert2-edit-defaults');
+             await sleepMs(10); // seems to help dom get itself sorted out
+                     
+             // We start with an empty defaults page
+             //
+             z.checkField('notifier', null);
+             z.checkField('summary_notifier', null);
+             z.checkField('annotate_messages', null);
+             z.checkField('reminder_frequency_mins', null);
+             z.checkField('throttle_fires_per_mins', null);
+             z.checkField('skip_internal_errors', null);
+             z.checkField('notifier_startup_grace_secs', null);
+             z.checkField('defer_startup_notifications', null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} }});
+             // Save the empty page
+             let saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} }});
+             // Change a field
+             await z.setField('notifier', 'foo');
+             await z.checkRender('notifier', /len=1.*"foo"/);
+             await z.setField('notifier', '');
+             await z.checkRender('notifier', /^\s+$/);
+             await z.setField('notifier', 'foo,bar');
+             await z.checkRender('notifier', /illegal characters/);
+             await z.setField('notifier', '[foo,bar]');
+             await z.checkRender('notifier', /len=2.*"foo","bar"/);
+             await z.setField('notifier', '{{ ["foo","baz"   ] }}');
+             await z.checkRender('notifier', /len=2.*"foo","baz"/);
+             await z.setField('notifier', 'foo');
+             await z.checkRender('notifier', /len=1.*"foo"/);
+
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: { notifier: 'foo' } }});
+
+             // Reload dialog and check foo is there.
+             z.ao.remove();
+             await sleepMs(11);
+             z = await initTest('alert2-edit-defaults');
+             z.checkField('notifier', 'foo');
+             // Now remove foo 
+             await z.setField('notifier', '');
+             await z.checkRender('notifier', /^\s+$/);
+             z.checkField('notifier', null);
+             saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: { } }});
+
+             // summary_notifier
+             await z.setField('summary_notifier', 'sfoo');
+             await z.checkRender('summary_notifier', /len=1.*"sfoo"/);
+             await z.setField('summary_notifier', '["sfoo","ss"]');
+             await z.checkRender('summary_notifier', /len=2.*"sfoo","ss"/);
+             await z.setField('summary_notifier', '');
+             await z.checkRender('summary_notifier', /^\s+$/);
+
+             // annotate_messages
+             await z.setField('annotate_messages', 'on');
+             await z.checkRender('annotate_messages', /result:true/);
+             await z.setField('annotate_messages', 'foo');
+             await z.checkRender('annotate_messages', /invalid boolean/);
+             await z.setField('annotate_messages', 'off');
+             await z.checkRender('annotate_messages', /result:false/);
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: { 'annotate_messages': 'off' } }});
+             await z.setField('annotate_messages', '');
+             await z.checkRender('annotate_messages', /^\s+$/);
+
+             // reminder_frequency_mins
+             await z.setField('reminder_frequency_mins', '3');
+             await z.checkRender('reminder_frequency_mins', /len=1\):3/);
+             await z.setField('reminder_frequency_mins', '3,4');
+             await z.checkRender('reminder_frequency_mins', /expected float/);
+             await z.setField('reminder_frequency_mins', '[3,4]');
+             await z.checkRender('reminder_frequency_mins', /len=2\):\[ 3,4 \]/);
+
+             // throttle_fires_per_mins
+             await z.setField('throttle_fires_per_mins', '3');
+             await z.checkRender('throttle_fires_per_mins', /not a valid value/);
+             await z.setField('throttle_fires_per_mins', '[3,5]');
+             await z.checkRender('throttle_fires_per_mins', /len=2\):\[ 3,5 \]/);
+             
+             await z.setField('skip_internal_errors', 'foo');
+             await z.checkRender('skip_internal_errors', /invalid boolean/);
+             await z.setField('skip_internal_errors', 'on');
+             await z.checkRender('skip_internal_errors', /result:true/);
+
+             await z.setField('notifier_startup_grace_secs', '-3');
+             await z.checkRender('notifier_startup_grace_secs', /must be at least 0.0/);
+             await z.setField('notifier_startup_grace_secs', '3');
+             await z.checkRender('notifier_startup_grace_secs', /result:3/);
+
+             await z.setField('defer_startup_notifications', 'yes');
+             await z.checkRender('defer_startup_notifications', /result:true/);
+             await z.setField('defer_startup_notifications', '[foo, zz ]');
+             await z.checkRender('defer_startup_notifications', /len=2\):\[ "foo","zz" \]/);
+
+             // Try setting all
+             z.setField('notifier', '[nfoo,  nnfoo]');
+             z.setField('summary_notifier', 'snfoo');
+             z.setField('annotate_messages', 'yes');
+             z.setField('reminder_frequency_mins', '77');
+             z.setField('throttle_fires_per_mins', '[2,5]');
+             z.setField('skip_internal_errors', 'no');
+             z.setField('notifier_startup_grace_secs', '6.2');
+             z.setField('defer_startup_notifications', '[blah,ick]');
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {
+                              notifier: '[nfoo,  nnfoo]',
+                              summary_notifier: 'snfoo',
+                              annotate_messages: 'yes',
+                              reminder_frequency_mins: '77',
+                              throttle_fires_per_mins: '[2,5]',
+                          },
+                                    skip_internal_errors: 'no',
+                                    notifier_startup_grace_secs: '6.2',
+                                    defer_startup_notifications: '[blah,ick]'
+                          }})
+
+             // Update two and remove two
+             z.setField('notifier', '[nfoo,  nnfoo3]');
+             z.setField('summary_notifier', '');
+             z.setField('notifier_startup_grace_secs', '6.3');
+             z.setField('defer_startup_notifications', '');
+             saveButton.click();
+             await waitDone(saveButton);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {
+                              notifier: '[nfoo,  nnfoo3]',
+                              annotate_messages: 'yes',
+                              reminder_frequency_mins: '77',
+                              throttle_fires_per_mins: '[2,5]',
+                          },
+                                    skip_internal_errors: 'no',
+                                    notifier_startup_grace_secs: '6.3',
+                          }})
+
+             // Reload page to see if we get what we expect
+             z.ao.remove();
+             await sleepMs(11);
+             z = await initTest('alert2-edit-defaults');
+             saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
+             z.checkField('notifier', '[nfoo,  nnfoo3]');
+             z.checkField('summary_notifier', null);
+             z.checkField('annotate_messages', 'yes');
+             z.checkField('reminder_frequency_mins', '77');
+             z.checkField('throttle_fires_per_mins', '[2,5]');
+             z.checkField('skip_internal_errors', 'no');
+             z.checkField('notifier_startup_grace_secs', '6.3');
+             z.checkField('defer_startup_notifications', null);
+         }
+         async function doTest2() {
+             // Create new alert
+             let z = await initTest('alert2-create');
+             await sleepMs(10); // seems to help dom get itself sorted out
+
+             // domain
+             await z.setField('domain', '');
+             await z.checkField('domain', null);
+             await z.setField('domain', 'a');
+             await z.checkRender('domain', /result:a/);
+             await z.setField('domain', 'a{{"b"');
+             await z.checkRender('domain', /invalid template/);
+             await z.setField('domain', 'a{{"b"}}');
+             await z.checkRender('domain', /result:ab/);
+             await z.setField('domain', 'd');
+             
+             // name
+             await z.setField('name', '');
+             await z.checkField('name', null);
+             await z.setField('name', 'a');
+             await z.checkRender('name', /result:a/);
+             await z.setField('name', 'a{{"b"}}');
+             await z.checkRender('name', /result:ab/);
+             await z.setField('name', 'n');
+
+             // friendly_name
+             await z.setField('friendly_name', '');
+             await z.checkField('friendly_name', null);
+             await z.setField('friendly_name', 'a');
+             await z.checkRender('friendly_name', /result:a/);
+             await z.setField('friendly_name', 'a{{"b"}}');
+             await z.checkRender('friendly_name', /result:ab/);
+             await z.setField('friendly_name', 'f');
+
+             // condition
+             await z.setField('condition', '');
+             await z.checkField('condition', null);
+             await z.setField('condition', 'on');
+             await z.checkRender('condition', /result:true/);
+             await z.setField('condition', '{{"yes"}}');
+             await z.checkRender('condition', /result:true/);
+             await z.setField('condition', 'off');
+
+             // trigger
+             await z.setField('trigger', '');
+             await z.checkField('trigger', null);
+             await z.setField('trigger', 'on');
+             await z.checkRender('trigger', /result:true/);
+             await z.setField('trigger', "[{'platform':'state','entity_id':'sensor.zz'}]");
+             await z.checkRender('trigger', /result:true/);
+             await z.setField('trigger', 'off');
+             
+             
+             
          }
         </script>
     </head>

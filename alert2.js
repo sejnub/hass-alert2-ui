@@ -19,6 +19,16 @@ function jFireEvent(elem, evName, params) {
 }
 function showToast(elem, amsg) { jFireEvent(elem, "hass-notification", { message: amsg }); }
 
+// unused
+function getEvValue(ev) {
+    //return ev.detail?.value || ev.target.value;
+    // for easier testing, is better to be more precise here:
+    if (Object.hasOwn(ev, 'detail') && Object.hasOwn(ev.detail, 'value')) {
+        return ev.detail.value;
+    }
+    return ev.target.value;
+}
+
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -1448,13 +1458,15 @@ customElements.define('ha-alert2-state', HaAlert2State);
 customElements.define('j-relative-time', RelativeTime);
 customElements.define("state-card-alert2", StateCardAlert2);
 
+let gDebounceMs = 750;
+
 class Alert2Tools {
     static get fireEvent() { return jFireEvent; }
     static get createDialog() { return jCreateDialog; }
     static get html() { return html; }
+    static set debounceMs(v) { gDebounceMs = v; }
 };
 customElements.define('alert2-tools', Alert2Tools);
-
 
 
 //
@@ -1462,6 +1474,7 @@ customElements.define('alert2-tools', Alert2Tools);
 // Logic for  Alert Manger
 //
 
+    
 class Alert2Manager extends LitElement {
     static properties = {
         open: {},
@@ -1475,7 +1488,7 @@ class Alert2Manager extends LitElement {
         super();
         this._hass = null;
         this._config = null;
-        this.fetchD = debounce(this.updateSearch.bind(this), 750);
+        this.fetchD = debounce(this.updateSearch.bind(this), gDebounceMs);
         this._searchTxt = '';
         this._searchStatus = { inProgress: false, rez: '', error: null };
     }
@@ -1660,7 +1673,8 @@ class Alert2CfgField extends LitElement {
         super();
         this.expanded = false;
         this.required = false; // default
-        this.renderD = debounce(this.doRenderTemplate.bind(this), 750);
+        console.log('created Alert2CfgField', this.name, gDebounceMs);
+        this.renderD = debounce(this.doRenderTemplate.bind(this), gDebounceMs);
         this.renderInfo = { rendering: false, error: null, result: null };
         this.focusOnce = false;
         this.addEventListener('focus', this._handleFocus);
@@ -1700,6 +1714,7 @@ class Alert2CfgField extends LitElement {
             resp.error = retv.error;
         }
         if (Object.hasOwn(retv, 'rez')) {
+            console.log(this.name, ' got render result ', retv.rez);
             resp.result = retv.rez;
         }
         if (Object.keys(resp).length == 1) {
@@ -1718,9 +1733,9 @@ class Alert2CfgField extends LitElement {
     _handleFocus(ev) {
         console.log('_handleFocus', ev.target.nodeName);
         return true;
-        this.expanded = true;
-        this.focusOnce = true;
-        jFireEvent(this, "expand-click", { expanded: this.expanded });
+        //this.expanded = true;
+        //this.focusOnce = true;
+        //jFireEvent(this, "expand-click", { expanded: this.expanded });
         // TODO - should this call renderD()?
     }
     _click(ev) {
@@ -1736,7 +1751,7 @@ class Alert2CfgField extends LitElement {
     _change(ev) {
         this.showRendered = true;
         let value = ev.detail?.value || ev.target.value;
-        //console.log('_change', value);
+        console.log('_change happend with ', ev.detail.value, ev.target.value);
         let parentP = this.currP;
         if (this.namePrefix) {
             parentP = parentP[this.namePrefix];
@@ -1755,8 +1770,8 @@ class Alert2CfgField extends LitElement {
                 parentP = this.currP[this.namePrefix];
             }
             parentP[this.name] = value;
-            this.renderD();
         }
+        this.renderD();
         jFireEvent(this, "change", { });
     }
     getValue() {
@@ -1811,6 +1826,7 @@ class Alert2CfgField extends LitElement {
         if (!this.hass) { return "waiting for hass"; }
         let value = uToE(this.getValue());
         let origValue = uToE(this.savedP[this.name]);
+        //console.log('render', this.name, value);
         let unsavedChange = html`<span style=${(value == origValue) ? 'visibility: hidden;':''}>*</span>`;
         let hasDefault = this.defaultP && Object.hasOwn(this.defaultP, this.name);
         let defaultValue = hasDefault ? uToE(this.defaultP[this.name]) : '';
@@ -1860,12 +1876,15 @@ class Alert2CfgField extends LitElement {
                         renderedStr = JSON.stringify(this.renderInfo.result);
                     }
                     lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
-                    console.log('list result', this.renderInfo.result);
+                    //console.log('list result', this.renderInfo.result);
                 }
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
-            renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
+            if (!lenStr && Array.isArray(this.renderInfo.result)) {
+                lenStr = html` (len=${this.renderInfo.result.length})`;
+            }
+            renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;" class="renderResult">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
         }
         // Final value combinbg default as inputted value
         //<code class="avalue">${displayStr(finalValue)}</code>
@@ -1877,14 +1896,14 @@ class Alert2CfgField extends LitElement {
                       <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
                       <div class="editfs" style="display: flex; flex-flow: column;">
                          <div class="avalue">${editElem}</div>
-                         <div>
+                         ${hasDefault ? html`<div class="defaultInfo">Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
+                         <div class="renderInfo">
                             ${this.renderInfo.rendering ?
                               html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;" ></ha-circular-progress>` : ''}
                             ${this.renderInfo.error != null ?
                               html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
-                            ${hasDefault ? html`<div>Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
+                            ${renderHtml}
                          </div>
-                         ${renderHtml}
                          <div style="margin-left: 1em;">
                             ${helpHtml}
                          </div>
@@ -1947,12 +1966,15 @@ function closeOtherExpanded(elem, ev) {
 class Alert2EditDefaults extends LitElement {
     static properties = {
         hass: { attribute: false },
+        //_topConfigs: { attribute: false },
+        // TEMPORARY for TESTING!!!!!!!
         _topConfigs: { state: true },
         _serverErr: { state: true },
         _saveInProgress: { state: true },
     }
     constructor() {
         super();
+        this._saveInProgress = false;
     }
     setConfig(config) {
         this._cardConfig = config;
@@ -1984,6 +2006,7 @@ class Alert2EditDefaults extends LitElement {
         let abutton = ev.target;
         this._saveInProgress = true;
         let rez;
+        //console.log(JSON.stringify(this._topConfigs));
         try {
             rez = await this.hass.callApi('POST', 'alert2/saveTopConfig',
                                           {topConfig: this._topConfigs.rawUi});
