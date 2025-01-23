@@ -284,6 +284,7 @@
                          } else {
                              jj = cf.shadowRoot.querySelector('ha-code-editor');
                          }
+                         jassert(jj);
                          jj.value = val;
                          jFireEvent(jj, 'value-changed', { value: val });
                          while (cc-- > 0) {
@@ -300,15 +301,26 @@
                          }
                      } else {
                          jj = cf.shadowRoot.querySelector('ha-code-editor');
+                         jassert(jj);
                          jFireEvent(jj, 'value-changed', { value: val });
                      }
                  }
                  await sleepMs(2);
+                 let hasSub = ['value','hysteresis','maximum','minimum'].includes(aname);
+                 
                  console.log('setting', aname, val, cf.currP[aname]);
                  if (val == '') {
-                     jassert(!Object.hasOwn(cf.currP, aname));
+                     if (hasSub) {
+                         jassert(!Object.hasOwn(cf.currP, 'threshold') || !Object.hasOwn(cf.currP['threshold'], aname));
+                     } else {
+                         jassert(!Object.hasOwn(cf.currP, aname));
+                     }
                  } else {
-                     jasserteq(cf.currP[aname], val);
+                     if (hasSub) {
+                         jasserteq(cf.currP['threshold'][aname], val);
+                     } else {
+                         jasserteq(cf.currP[aname], val);
+                     }
                  }
              }
              return {
@@ -489,29 +501,29 @@
              await z.setField('domain', '');
              await z.checkField('domain', null);
              await z.setField('domain', 'a');
-             await z.checkRender('domain', /result:a/);
+             await z.checkRender('domain', /result:"a"/);
              await z.setField('domain', 'a{{"b"');
              await z.checkRender('domain', /invalid template/);
              await z.setField('domain', 'a{{"b"}}');
-             await z.checkRender('domain', /result:ab/);
+             await z.checkRender('domain', /result:"ab"/);
              await z.setField('domain', 'd');
              
              // name
              await z.setField('name', '');
              await z.checkField('name', null);
              await z.setField('name', 'a');
-             await z.checkRender('name', /result:a/);
+             await z.checkRender('name', /result:"a"/);
              await z.setField('name', 'a{{"b"}}');
-             await z.checkRender('name', /result:ab/);
+             await z.checkRender('name', /result:"ab"/);
              await z.setField('name', 'n');
 
              // friendly_name
              await z.setField('friendly_name', '');
              await z.checkField('friendly_name', null);
              await z.setField('friendly_name', 'a');
-             await z.checkRender('friendly_name', /result:a/);
+             await z.checkRender('friendly_name', /result:"a"/);
              await z.setField('friendly_name', 'a{{"b"}}');
-             await z.checkRender('friendly_name', /result:ab/);
+             await z.checkRender('friendly_name', /result:"ab"/);
              await z.setField('friendly_name', 'f');
 
              // condition
@@ -527,13 +539,150 @@
              await z.setField('trigger', '');
              await z.checkField('trigger', null);
              await z.setField('trigger', 'on');
-             await z.checkRender('trigger', /result:true/);
+             await z.checkRender('trigger', /is not iterable/);
              await z.setField('trigger', "[{'platform':'state','entity_id':'sensor.zz'}]");
-             await z.checkRender('trigger', /result:true/);
-             await z.setField('trigger', 'off');
+             await z.checkRender('trigger', /\[{"platform":"state/);
+             await z.setField('trigger', '');
+             await z.checkField('trigger', null);
+
+             // threshold: value
+             await z.setField('value', '3');
+             await z.checkRender('value', /result:3/);
+             await z.setField('value', '');
+             await z.checkField('value', null);
              
+             // threshold: hysteresis
+             await z.setField('hysteresis', '3');
+             await z.checkRender('hysteresis', /result:3/);
+             await z.setField('hysteresis', '-3');
+             await z.checkRender('hysteresis', /value must be at least/);
+             await z.setField('hysteresis', '');
+             await z.checkField('hysteresis', null);
              
+             // threshold: minimum
+             await z.setField('minimum', '3');
+             await z.checkRender('minimum', /result:3/);
+             await z.setField('minimum', '');
+             await z.checkField('minimum', null);
              
+             // threshold: maximum
+             await z.setField('maximum', '3');
+             await z.checkRender('maximum', /result:3/);
+             await z.setField('maximum', '');
+             await z.checkField('maximum', null);
+
+             // delay_on_secs
+             await z.setField('delay_on_secs', '3');
+             await z.checkRender('delay_on_secs', /result:3/);
+             await z.setField('delay_on_secs', 'a');
+             await z.checkRender('delay_on_secs', /expected float/);
+             await z.setField('delay_on_secs', '');
+             await z.checkField('delay_on_secs', null);
+
+             // early_start
+             await z.setField('early_start', 'off');
+             await z.checkRender('early_start', /result:false/);
+             await z.setField('early_start', '');
+             await z.checkField('early_start', null);
+
+             // message
+             await z.setField('message', 'yay');
+             await z.checkRender('message', /result:"yay"/);
+             await z.setField('message', '{{"a"+"b"}}');
+             await z.checkRender('message', /result:"ab"/);
+             await z.setField('message', '');
+             await z.checkField('message', null);
+
+             // done_message
+             await z.setField('done_message', 'yay');
+             await z.checkRender('done_message', /result:"yay"/);
+             await z.setField('done_message', '{{"a"+"b"}}');
+             await z.checkRender('done_message', /result:"ab"/);
+             await z.setField('done_message', '');
+             await z.checkField('done_message', null);
+
+             // notifier
+             await z.setField('notifier', 'yay');
+             await z.checkRender('notifier', /result \(len=1\):\["yay"\]/);
+             await z.setField('notifier', '{{"a"+"b"}}');
+             await z.checkRender('notifier', /result \(len=1\):\["ab"\]/);
+             await z.setField('notifier', '[a,b]');
+             await z.checkRender('notifier', /result \(len=2\):\["a","b"\]/);
+             await z.setField('notifier', '');
+             await z.checkField('notifier', null);
+
+             // summary_notifier
+             await z.setField('summary_notifier', 'yay');
+             await z.checkRender('summary_notifier', /result \(len=1\):\["yay"\]/);
+             await z.setField('summary_notifier', '{{"a"+"b"}}');
+             await z.checkRender('summary_notifier', /result \(len=1\):\["ab"\]/);
+             await z.setField('summary_notifier', '[a,b]');
+             await z.checkRender('summary_notifier', /result \(len=2\):\["a","b"\]/);
+             await z.setField('summary_notifier', '');
+             await z.checkField('summary_notifier', null);
+
+             // title
+             await z.setField('title', 'yay');
+             await z.checkRender('title', /result:"yay"/);
+             await z.setField('title', '{{"a"+"b"}}');
+             await z.checkRender('title', /result:"ab"/);
+             await z.setField('title', '');
+             await z.checkField('title', null);
+
+             // target
+             await z.setField('target', 'yay');
+             await z.checkRender('target', /result:"yay"/);
+             await z.setField('target', '{{"a"+"b"}}');
+             await z.checkRender('target', /result:"ab"/);
+             await z.setField('target', '');
+             await z.checkField('target', null);
+
+             // data
+             await z.setField('data', 'yay');
+             await z.checkRender('data', /expected dict/);
+             await z.setField('data', '{a: 3}');
+             await z.checkRender('data', /result:{"a":3}/);
+             await z.setField('data', '{a: 3, "b": foo, "c": 3}');
+             await z.checkRender('data', /result:{"a":3,"b":"foo","c":3}/);
+             await z.setField('data', '');
+             await z.checkField('data', null);
+
+             // throttle_fires_per_mins
+             await z.setField('throttle_fires_per_mins', '3,4');
+             await z.checkRender('throttle_fires_per_mins', /not a valid/);
+             await z.setField('throttle_fires_per_mins', '[3,4]');
+             await z.checkRender('throttle_fires_per_mins', /result \(len=2\):\[3,4\]/);
+             await z.setField('throttle_fires_per_mins', '');
+             await z.checkField('throttle_fires_per_mins', null);
+
+             // reminder_frequency_mins
+             await z.setField('reminder_frequency_mins', '3');
+             await z.checkRender('reminder_frequency_mins', /result \(len=1\):\[3\]/);
+             await z.setField('reminder_frequency_mins', '[3,4]');
+             await z.checkRender('reminder_frequency_mins', /result \(len=2\):\[3,4\]/);
+             await z.setField('reminder_frequency_mins', '');
+             await z.checkField('reminder_frequency_mins', null);
+             
+             // annotate_messages
+             await z.setField('annotate_messages', 'off');
+             await z.checkRender('annotate_messages', /result:false/);
+             await z.setField('annotate_messages', '');
+             await z.checkField('annotate_messages', null);
+
+             // generator
+             await z.setField('generator', 'ff');
+             await z.checkRender('generator', /"list":\["ff"\],"len":1.*firstElemVars/);
+             await z.setField('generator', '[f1,f2]');
+             await z.checkRender('generator', /"list":\["f1","f2"\],"len":2.*firstElemVars/);
+             await z.setField('generator', '');
+             await z.checkField('generator', null);
+
+             // generator_name
+             await z.setField('generator_name', 'yay');
+             await z.checkRender('generator_name', /result:"yay"/);
+             await z.setField('generator_name', '');
+             await z.checkField('generator_name', null);
+
          }
         </script>
     </head>

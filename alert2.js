@@ -1629,6 +1629,7 @@ const debounce = (callback, wait) => {
   };
 }
 function displayStr(tval) {
+    return JSON.stringify(tval);
     if (Array.isArray(tval)) {
         if (tval.length == 0) { return '[]' }
         if (tval.length == 1) { return tval[0] }
@@ -1644,7 +1645,7 @@ function displayStr(tval) {
 
 let TopTypes = makeEnum({ COND:  'cond', EVENT:  "event", GENERATOR: "generator" });
 let FieldTypes = makeEnum({ TEMPLATE: 'template', FLOAT:  "float", STR: "str", BOOL: 'bool' });
-let TemplateTypes = makeEnum({ LIST: 'list' }) //, CONDITION: 'condition', STRING: 'str' });
+let TemplateTypes = makeEnum({ LIST: 'list', SINGLE:'single' }) //, CONDITION: 'condition', STRING: 'str' });
 
 class Alert2CfgField extends LitElement {
     static properties = {
@@ -1760,7 +1761,7 @@ class Alert2CfgField extends LitElement {
         if (value.trim() === '') {
             if (parentP) {
                 delete parentP[this.name];
-                if (this.namePrefix && (Object.keys(this.parentP).length == 0)) {
+                if (this.namePrefix && (Object.keys(parentP).length == 0)) {
                     delete this.currP[this.namePrefix];
                 }
             } // otherwise no entry to delete
@@ -1865,23 +1866,26 @@ class Alert2CfgField extends LitElement {
             } else if (this.type == FieldTypes.FLOAT) {
             } else if (this.type == FieldTypes.BOOL) {
             } else if (this.type == FieldTypes.TEMPLATE) {
-                if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
-                    let firstOnly = '';
-                    if (this.name == 'generator') {
-                        if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
-                            firstOnly = `showing first ${this.renderInfo.result.list.length}`;
+                if (0) {
+                    if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
+                        let firstOnly = '';
+                        if (this.name == 'generator') {
+                            if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
+                                firstOnly = `showing first ${this.renderInfo.result.list.length}`;
+                            }
+                            renderedStr = JSON.stringify(this.renderInfo.result);
+                        } else {
+                            renderedStr = JSON.stringify(this.renderInfo.result);
+                            lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
+                            //console.log('list result', this.renderInfo.result);
                         }
-                        renderedStr = JSON.stringify(this.renderInfo.result);
-                    } else {
-                        renderedStr = JSON.stringify(this.renderInfo.result);
                     }
-                    lenStr = html` (len=${this.renderInfo.result.length}${firstOnly})`;
-                    //console.log('list result', this.renderInfo.result);
                 }
             } else {
                 console.error('wrong type for field', this.name, this.type);
             }
             if (!lenStr && Array.isArray(this.renderInfo.result)) {
+                console.log('got array result', this.renderInfo.result);
                 lenStr = html` (len=${this.renderInfo.result.length})`;
             }
             renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;" class="renderResult">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
@@ -2324,7 +2328,7 @@ class Alert2Create extends LitElement {
             <div><span style="visibility:hidden">*</span>Threshold <div style="margin-left: 1.5em;">
                <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
-                     templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
+                     templateType=${TemplateTypes.SINGLE} .genResult=${this._generatorResult}
                      .savedP=${{}} .currP=${this.alertCfg} >
                   <div slot="help">
                       some help text
