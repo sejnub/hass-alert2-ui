@@ -97,10 +97,13 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             jassert(await startTest(doTest1));
-             jassert(await startTest(doTest2));
-             jassert(await startTest(doTest3));
-             jassert(await startTest(doTest4));
+             if (1) {
+                 jassert(await startTest(doTest1));
+                 jassert(await startTest(doTest2));
+                 jassert(await startTest(doTest3));
+                 jassert(await startTest(doTest4));
+             }
+             jassert(await startTest(doTest5));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -253,10 +256,11 @@
              async function checkRender(aname, aregex) {
                  let cf = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`);
                  await sleepMs(3);
+                 //console.log(aname, cf.shadowRoot.innerHTML);
                  while (true) {
+                     await sleepMs(20);
                      let jj = cf.shadowRoot.querySelector('ha-circular-progress');
                      if (!jj) { break; }
-                     await sleepMs(20);
                  }
                  await sleepMs(3);
                  let ri = cf.shadowRoot.querySelector('div.renderInfo');
@@ -277,6 +281,7 @@
                  // }
              }
              async function setField(aname, val) {
+                 jasserteq(typeof val, "string");
                  let cf = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`);
                  let jj = cf.shadowRoot.querySelector('ha-textfield');
                  if (jj) {
@@ -297,8 +302,8 @@
                              jj.focus();
                              await sleepMs(1);
                          } else {
-                             jj = cf.shadowRoot.querySelector('ha-code-editor');
                          }
+                         jj = cf.shadowRoot.querySelector('ha-code-editor');
                          jassert(jj);
                          jj.value = val;
                          jFireEvent(jj, 'value-changed', { value: val });
@@ -323,7 +328,7 @@
                  await sleepMs(2);
                  let hasSub = ['value','hysteresis','maximum','minimum'].includes(aname);
                  
-                 console.log('setting', aname, val, cf.currP[aname]);
+                 console.log(`setting ${aname} to "${val}" and data=${cf.currP[aname]}`);
                  if (val == '') {
                      if (hasSub) {
                          jassert(!Object.hasOwn(cf.currP, 'threshold') || !Object.hasOwn(cf.currP['threshold'], aname));
@@ -351,11 +356,26 @@
                      }
                  }
              }
+             function checkDefault(aname, aregex) {
+                 let cf = ao.shadowRoot.querySelector(`alert2-cfg-field[name="${aname}"]`);
+                 let pp = cf.shadowRoot.querySelector(`div.defaultInfo`);
+                 if (aregex === null) {
+                     jassert(!pp);
+                 } else {
+                     let txt = pp.textContent;
+                     let idx = txt.search(aregex);
+                     if (! (idx >= 0)) {
+                         console.log(`Did not find "${aregex}" in ${txt}`);
+                         jassert(false);
+                     }
+                 }
+             }
              return {
                  checkField: checkField,
                  checkRender: checkRender,
                  setField: setField,
                  checkErr: checkErr,
+                 checkDefault: checkDefault,
              };
          }
          async function doTest1() {
@@ -400,6 +420,7 @@
              z.ao.remove();
              await sleepMs(11);
              z = await initTest('alert2-edit-defaults');
+             await sleepMs(11);
              z.checkField('notifier', 'foo');
              // Now remove foo 
              await z.setField('notifier', '');
@@ -503,6 +524,7 @@
              z.ao.remove();
              await sleepMs(11);
              z = await initTest('alert2-edit-defaults');
+             await sleepMs(11);
              z.checkField('notifier', '[nfoo,  nnfoo3]');
              z.checkField('summary_notifier', null);
              z.checkField('annotate_messages', 'yes');
@@ -864,7 +886,10 @@
                      await sleepMs(10);
                      let s = z.ao.getSearchStatus();
                      console.log('fuck', s.rez);
-                     if (s.inProgress === false) { return s.rez; }
+                     if (s.inProgress === false) {
+                         await sleepMs(3);
+                         return s.rez;
+                     }
                  }
              }
              
@@ -945,6 +970,66 @@
              jassertObjeq(z.ao.getSearchStatus().rez, { results: [ { id: 'sensor.alert2generator_g1', domain: 'alert2generator', name: 'g1' }]});
          }
 
+         async function doTest5() {
+             let tobj = await callApi('POST', 'alert2test/tcheck',
+                                      { stage:'reset', yaml: { defaults: { reminder_frequency_mins: 3,
+                                                                           annotate_messages: false,
+                                      },
+                                                               notifier_startup_grace_secs: 3,
+                                                               defer_startup_notifications: ['foo']
+                                      } } );
+             jassertObjeq(tobj, {});
+
+             z = await initTest('alert2-edit-defaults');
+             await sleepMs(11);
+             z.setField('annotate_messages', 'yes');
+             z.setField('notifier', 'happy');
+             z.setField('notifier_startup_grace_secs', '5');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
+             z.ao.remove();
+
+             // now let's test edit defaults
+             z = await initTest('alert2-edit-defaults');
+             await sleepMs(100);
+             z.checkDefault('notifier', /"persistent_notification"/);
+             z.checkDefault('summary_notifier', /empty: false/);
+             z.checkDefault('annotate_messages', /empty: false/);
+             z.checkDefault('reminder_frequency_mins', /empty: 3/);
+             z.checkDefault('throttle_fires_per_mins', /empty: ""/);
+             z.checkDefault('skip_internal_errors', /empty: false/);
+             z.checkDefault('notifier_startup_grace_secs', /empty: 3/);
+             z.checkDefault('defer_startup_notifications', /empty: \["foo"\]/);
+
+             z.ao.remove();
+             // now let's test create alert
+             z = await initTest('alert2-create');
+             await sleepMs(100);
+             z.checkDefault('domain', null);
+             z.checkDefault('name', null);
+             z.checkDefault('friendly_name', null);
+             z.checkDefault('condition', null);
+             z.checkDefault('trigger', null);
+             z.checkDefault('value', null);
+             z.checkDefault('hysteresis', null);
+             z.checkDefault('minimum', null);
+             z.checkDefault('maximum', null);
+             z.checkDefault('delay_on_secs', null);
+             z.checkDefault('early_start', null);
+             z.checkDefault('message', null);
+             z.checkDefault('done_message', null);
+             z.checkDefault('notifier', /empty: "happy"/);
+             z.checkDefault('summary_notifier', /empty: false/);
+             z.checkDefault('title', null);
+             z.checkDefault('target', null);
+             z.checkDefault('data', null);
+             
+             z.checkDefault('throttle_fires_per_mins', /empty: ""/);
+             z.checkDefault('reminder_frequency_mins', /empty: 3/);
+             z.checkDefault('annotate_messages', /empty: true/);
+             z.checkDefault('generator', null);
+             z.checkDefault('generator_name', null);
+             z.ao.remove();
+         }
         </script>
     </head>
     <body>

@@ -1544,7 +1544,8 @@ class Alert2Manager extends LitElement {
         let resultHtml = '';
         if (this._searchStatus.rez) {
             if (this._searchStatus.rez.results.length > 0) {
-                resultHtml = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+                let rezlist = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+                resultHtml = html`<div class="results">${rezlist}</div>`;
             } else {
                 resultHtml = html`<div>No results</div>`;
             }
@@ -1568,9 +1569,7 @@ class Alert2Manager extends LitElement {
               <div>
                   ${this._searchStatus.inProgress ? html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;"></ha-circular-progress>` : ''}
                   ${errorHtml}
-                  <div class="results">
-                     ${resultHtml}
-                  </div>
+                  ${resultHtml}
               </div>
             </div>
           </ha-card>`;
@@ -1772,7 +1771,7 @@ class Alert2CfgField extends LitElement {
     _change(ev) {
         //this.showRendered = true;
         let value = ev.detail?.value || ev.target.value;
-        console.log('_change happend with ', ev.detail.value, ev.target.value);
+        console.log(`_change happend to ${this.name} with value=${value}`);
         let parentP = this.currP;
         if (this.namePrefix) {
             parentP = parentP[this.namePrefix];
@@ -1877,7 +1876,7 @@ class Alert2CfgField extends LitElement {
         let renderHtml = '';
         let helpHtml = '';
         if (this.expanded) {
-            helpHtml = `<slot name="help" class="shelp"></slot>`;
+            helpHtml = html`<slot name="help" class="shelp"></slot>`;
         }
         if (true || this.showRendered) {
             let renderedStr = ''+displayStr(this.renderInfo.result);
@@ -1931,6 +1930,7 @@ class Alert2CfgField extends LitElement {
                       <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
                       <div class="editfs" style="display: flex; flex-flow: column;">
                          <div class="avalue">${editElem}</div>
+                         <div style="margin-left: 0em;">${helpHtml}</div>
                          ${hasDefault ? html`<div class="defaultInfo">Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
                          <div class="renderInfo">
                             ${this.renderInfo.rendering ?
@@ -1938,9 +1938,6 @@ class Alert2CfgField extends LitElement {
                             ${this.renderInfo.error != null ?
                               html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
                             ${renderHtml}
-                         </div>
-                         <div style="margin-left: 1em;">
-                            ${helpHtml}
                          </div>
                       </div>
                     </div>`;
@@ -1964,13 +1961,6 @@ class Alert2CfgField extends LitElement {
        .editfs {
           flex: 1 1 30em;
           /*max-width: 50em;*/
-       }
-       .shelp {
-          font-size: 0.9em;
-       }
-       .shelp > ul {
-          margin-top: 0.1em;
-          margin-bottom: 0;
        }
        pre {
           margin: 0;
@@ -1997,6 +1987,16 @@ function closeOtherExpanded(elem, ev) {
         });
     }
 }
+
+let helpCommon = {
+    notifier: html`Name of notifiers to use for sending notifications. Can be:
+                  <ul><li>Single notifier or name of entity with list: <code>telegram1</code>
+                      <li>List of notifiers: <code>[ telegram1, telegram2 ]</code>
+                      <li>Template producing list of notifiers: <code>{{ [ "tel1", "tel2" ] }}</code>
+                  </ul>`,
+};
+
+
 
 class Alert2EditDefaults extends LitElement {
     static properties = {
@@ -2088,9 +2088,7 @@ class Alert2EditDefaults extends LitElement {
                  templateType=${TemplateTypes.LIST} .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
                   .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.notifier}</div></alert2-cfg-field>
 
             <alert2-cfg-field .hass=${this.hass} name="summary_notifier" type=${FieldTypes.TEMPLATE}
                  templateType=${TemplateTypes.LIST} .defaultP=${this._topConfigs.rawYaml.defaults}
@@ -2155,6 +2153,10 @@ class Alert2EditDefaults extends LitElement {
     }
     h3:first-of-type {
        margin-top: 0em;
+    }
+    div[slot="help"] > ul {
+       margin-top: 0.1em;
+       margin-bottom: 0;
     }
       `;
 }
