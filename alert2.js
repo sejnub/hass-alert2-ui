@@ -1866,6 +1866,17 @@ class Alert2CfgField extends LitElement {
             } else if (this.type == FieldTypes.FLOAT) {
             } else if (this.type == FieldTypes.BOOL) {
             } else if (this.type == FieldTypes.TEMPLATE) {
+                if (this.name == 'generator') {
+                    if (this.renderInfo.result) {
+                        let firstOnly = '';
+                        if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
+                            firstOnly = `, showing first ${this.renderInfo.result.list.length}`;
+                        }
+                        lenStr = html` (len=${this.renderInfo.result.len}${firstOnly})`;
+                        renderedStr = html`${displayStr(this.renderInfo.result.list)}<br>
+                                           First element vars: ${displayStr(this.renderInfo.result.firstElemVars)}`;
+                    }
+                }
                 if (0) {
                     if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
                         let firstOnly = '';
@@ -2193,6 +2204,7 @@ class Alert2Create extends LitElement {
     async _update(ev) { await this.doOp('update', ev); }
     async _delete(ev) { await this.doOp('delete', ev); }
     async doOp(opName, ev) {
+        this._serverErr = null;
         let abutton = ev.target;
         if (this._opInProgress.inProgress) {
             return;
@@ -2451,13 +2463,13 @@ class Alert2Create extends LitElement {
 
             <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">
 
-            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._validate}
+            <div style="margin-top: 0.5em;"><ha-progress-button class="validateB" @click=${this._validate}
                  .progress=${this._opInProgress.op=='validate'&&this._opInProgress.inProgress}>Validate</ha-progress-button></div>
-            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._create}
+            <div style="margin-top: 0.5em;"><ha-progress-button class="createB"  @click=${this._create}
                  .progress=${this._opInProgress.op=='create'&&this._opInProgress.inProgress}>Create</ha-progress-button></div>
-            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._update}
+            <div style="margin-top: 0.5em;"><ha-progress-button  class="updateB" @click=${this._update}
                  .progress=${this._opInProgress.op=='update'&&this._opInProgress.inProgress}>Update</ha-progress-button></div>
-            <div style="margin-top: 0.5em;"><ha-progress-button  @click=${this._delete}
+            <div style="margin-top: 0.5em;"><ha-progress-button  class="deleteB" @click=${this._delete}
                  .progress=${this._opInProgress.op=='delete'&&this._opInProgress.inProgress}>Delete</ha-progress-button></div>
             ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
 

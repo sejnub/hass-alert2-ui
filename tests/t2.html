@@ -98,7 +98,8 @@
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
              //jassert(await startTest(doTest1));
-             jassert(await startTest(doTest2));
+             //jassert(await startTest(doTest2));
+             jassert(await startTest(doTest3));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -188,6 +189,9 @@
              let ao = document.createElement(eName);
              console.log('ao is ', ao, eName);
              ao.hass = newHass;
+             if (eName == 'alert2-create') {
+                 ao.didSomethingCb = ()=>{console.log('alert2-create didSomethingCb'); };
+             }
              testDiv.appendChild(ao);
              let c = 0;
              while (true) {
@@ -223,6 +227,11 @@
                  if (!abutton.progress) { return; }
                  await sleepMs(50);
              }
+         }
+         async function clickWait(abutton) {
+             jassert(abutton);
+             abutton.click();
+             await waitDone(abutton);
          }
          function createHelpers(ao) {
              function checkField(aname, val) {
@@ -323,10 +332,24 @@
                      }
                  }
              }
+             function checkErr(aregex) {
+                 let errD = ao.shadowRoot.querySelector('ha-alert');
+                 if (!aregex) {
+                     jassert(!errD);
+                 } else {
+                     let txt = errD.textContent;
+                     let idx = txt.search(aregex);
+                     if (! (idx >= 0)) {
+                         console.log(`Did not find "${aregex}" in ${txt}`);
+                         jassert(false);
+                     }
+                 }
+             }
              return {
                  checkField: checkField,
                  checkRender: checkRender,
                  setField: setField,
+                 checkErr: checkErr,
              };
          }
          async function doTest1() {
@@ -346,9 +369,7 @@
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {} }});
              // Save the empty page
-             let saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {} }});
              // Change a field
@@ -365,8 +386,7 @@
              await z.setField('notifier', 'foo');
              await z.checkRender('notifier', /len=1.*"foo"/);
 
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: { notifier: 'foo' } }});
 
@@ -379,9 +399,7 @@
              await z.setField('notifier', '');
              await z.checkRender('notifier', /^\s+$/);
              z.checkField('notifier', null);
-             saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: { } }});
 
@@ -400,8 +418,7 @@
              await z.checkRender('annotate_messages', /invalid boolean/);
              await z.setField('annotate_messages', 'off');
              await z.checkRender('annotate_messages', /result:false/);
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: { 'annotate_messages': 'off' } }});
              await z.setField('annotate_messages', '');
@@ -409,17 +426,17 @@
 
              // reminder_frequency_mins
              await z.setField('reminder_frequency_mins', '3');
-             await z.checkRender('reminder_frequency_mins', /len=1\):3/);
+             await z.checkRender('reminder_frequency_mins', /len=1\):\[3\]/);
              await z.setField('reminder_frequency_mins', '3,4');
              await z.checkRender('reminder_frequency_mins', /expected float/);
              await z.setField('reminder_frequency_mins', '[3,4]');
-             await z.checkRender('reminder_frequency_mins', /len=2\):\[ 3,4 \]/);
+             await z.checkRender('reminder_frequency_mins', /len=2\):\[3,4\]/);
 
              // throttle_fires_per_mins
              await z.setField('throttle_fires_per_mins', '3');
              await z.checkRender('throttle_fires_per_mins', /not a valid value/);
              await z.setField('throttle_fires_per_mins', '[3,5]');
-             await z.checkRender('throttle_fires_per_mins', /len=2\):\[ 3,5 \]/);
+             await z.checkRender('throttle_fires_per_mins', /len=2\):\[3,5\]/);
              
              await z.setField('skip_internal_errors', 'foo');
              await z.checkRender('skip_internal_errors', /invalid boolean/);
@@ -434,7 +451,7 @@
              await z.setField('defer_startup_notifications', 'yes');
              await z.checkRender('defer_startup_notifications', /result:true/);
              await z.setField('defer_startup_notifications', '[foo, zz ]');
-             await z.checkRender('defer_startup_notifications', /len=2\):\[ "foo","zz" \]/);
+             await z.checkRender('defer_startup_notifications', /len=2\):\["foo","zz"\]/);
 
              // Try setting all
              z.setField('notifier', '[nfoo,  nnfoo]');
@@ -445,8 +462,7 @@
              z.setField('skip_internal_errors', 'no');
              z.setField('notifier_startup_grace_secs', '6.2');
              z.setField('defer_startup_notifications', '[blah,ick]');
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {
                               notifier: '[nfoo,  nnfoo]',
@@ -465,8 +481,7 @@
              z.setField('summary_notifier', '');
              z.setField('notifier_startup_grace_secs', '6.3');
              z.setField('defer_startup_notifications', '');
-             saveButton.click();
-             await waitDone(saveButton);
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button'));
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {
                               notifier: '[nfoo,  nnfoo3]',
@@ -482,7 +497,6 @@
              z.ao.remove();
              await sleepMs(11);
              z = await initTest('alert2-edit-defaults');
-             saveButton = z.ao.shadowRoot.querySelector('ha-progress-button');
              z.checkField('notifier', '[nfoo,  nnfoo3]');
              z.checkField('summary_notifier', null);
              z.checkField('annotate_messages', 'yes');
@@ -491,6 +505,7 @@
              z.checkField('skip_internal_errors', 'no');
              z.checkField('notifier_startup_grace_secs', '6.3');
              z.checkField('defer_startup_notifications', null);
+             z.ao.remove();
          }
          async function doTest2() {
              // Create new alert
@@ -671,9 +686,9 @@
 
              // generator
              await z.setField('generator', 'ff');
-             await z.checkRender('generator', /"list":\["ff"\],"len":1.*firstElemVars/);
+             await z.checkRender('generator', /len=1\):\["ff"\].*\n.*First element vars/);
              await z.setField('generator', '[f1,f2]');
-             await z.checkRender('generator', /"list":\["f1","f2"\],"len":2.*firstElemVars/);
+             await z.checkRender('generator', /len=2\):\["f1","f2"\].*\n.*First element vars/);
              await z.setField('generator', '');
              await z.checkField('generator', null);
 
@@ -682,7 +697,48 @@
              await z.checkRender('generator_name', /result:"yay"/);
              await z.setField('generator_name', '');
              await z.checkField('generator_name', null);
+             z.ao.remove();
+         }
+         async function doTest3() {
+             // Create new alert
+             let z = await initTest('alert2-create');
+             await sleepMs(10); // seems to help dom get itself sorted out
 
+             await z.setField('domain', 'd1');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(/required key.*domain/);
+
+             await z.setField('name', 'n1');
+             await z.setField('condition', 'off');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'off' }
+                          ]}})
+
+             // duplicate create should fail
+             await z.setField('condition', 'on');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(/Duplicate declaration/);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'off' }
+                          ]}})
+
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.deleteB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} } })
+
+             // Delete again should fail
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.deleteB'));
+             z.checkErr(/can not find existing/);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} } })
+
+             
+             //z.ao.remove();
          }
         </script>
     </head>
