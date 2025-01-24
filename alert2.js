@@ -1511,7 +1511,7 @@ class Alert2Manager extends LitElement {
             retv = await this._hass.callApi('POST', 'alert2/manageAlert',
                                             { search: { str: this._searchTxt } });
         } catch (err) {
-            console.error('search error', err);
+            //console.error('search error', err);
             this._searchStatus = { inProgress: false, error: 'http err: ' + JSON.stringify(err),
                                 rez: null };
             return;
@@ -1533,25 +1533,33 @@ class Alert2Manager extends LitElement {
         innerElem.didSomethingCb = ()=>{ this.fetchD(); };
         jCreateDialog(this, 'Edit alert', innerElem);
     }
+    getSearchStatus() {    return this._searchStatus;    } // for testing
     render() {
         if (!this._hass) {
             return html`<div>Loading.. waiting for hass to load</div>`;
         }
-        console.log(this._searchStatus);
+        //console.log(this._searchStatus);
         let errorHtml = this._searchStatus.error ?
             html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this._searchStatus.error}</ha-alert>` : "";
         let resultHtml = '';
         if (this._searchStatus.rez) {
-            resultHtml = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+            if (this._searchStatus.rez.results.length > 0) {
+                resultHtml = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+            } else {
+                resultHtml = html`<div>No results</div>`;
+            }
         }
         return html`<ha-card>
             <h1 class="card-header"><div class="name">Alert2 Manager</div></h1>
             <div class="card-content">
               <div style="display:flex; align-items: center; margin-bottom: 0.3em;">
-                  <ha-progress-button .progress=${this._ackAllInProgress}
+                  <!-- this should really just be ha-button -->
+                  <ha-progress-button .progress=${false}
                     @click=${this.editDefaults}>Edit defaults</ha-progress-button>
-                  <ha-progress-button .progress=${this._ackAllInProgress}
+                  <ha-progress-button .progress=${false}
                     @click=${this.createNew}>Create new alert</ha-progress-button>
+                  <ha-progress-button .progress=${false}
+                    @click=${this.refresh}>Refresh</ha-progress-button>
               </div>
               <div style="margin-bottom: 1em;">
                   Search: 
@@ -1560,10 +1568,15 @@ class Alert2Manager extends LitElement {
               <div>
                   ${this._searchStatus.inProgress ? html`<ha-circular-progress class="render-spinner" indeterminate size="small" style="display: inline-block;"></ha-circular-progress>` : ''}
                   ${errorHtml}
-                  ${resultHtml}
+                  <div class="results">
+                     ${resultHtml}
+                  </div>
               </div>
             </div>
           </ha-card>`;
+    }
+    async refresh(ev) {
+        this.fetchD();
     }
     async createNew(ev) {
         let innerElem = document.createElement('alert2-create');
@@ -1653,52 +1666,57 @@ class Alert2CfgField extends LitElement {
         name: {  },
         type: {  }, // FieldTypes
         templateType: {  },
+        namePrefix: {},
+        required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
+
         defaultP: { attribute: false },
         savedP: { attribute: false },
         currP: { attribute: false },
-        namePrefix: {},
-        //value: { attribute: false },
-        //finalVal: { attribute: false },
-        //defaultVal: { attribute: false },
-        //topConfigs: { attribute: false },
-        //default: { attribute: false },
-        required: { type: Boolean }, // 'type' is so can specify as attribute rather than prop
-        expanded: { attribute: false },
-        renderInfo: { state: true },
         genResult : { attribute: false },
-        showRendered: { state: true },
-        //inDefaults: { state: true },
+        expanded: { attribute: false },
+
+        renderInfo: { state: true },
+        //showRendered: { state: true },
     }
     static shadowRootOptions = {...LitElement.shadowRootOptions, delegatesFocus: true};
     constructor() {
         super();
         this.expanded = false;
         this.required = false; // default
-        console.log('created Alert2CfgField', this.name, gDebounceMs);
         this.renderD = debounce(this.doRenderTemplate.bind(this), gDebounceMs);
         this.renderInfo = { rendering: false, error: null, result: null };
         this.focusOnce = false;
         this.addEventListener('focus', this._handleFocus);
-        this.showRendered = false;
+        //this.showRendered = false;
         //this.addEventListener("focusin", (event) => { console.log('focusin'); });
         //this.addEventListener("focusout", (event) => { console.log('focusout'); });
     }
     connectedCallback() {
         super.connectedCallback();
+        //console.log('created Alert2CfgField', this.name, gDebounceMs);
         if (!this.currP) {
             throw new Error("this.currP undefined");
         }
     }
+    shouldUpdate(changedProps) {
+        if (changedProps.has('genResult') || changedProps.has('currP')) {
+            this.renderD();
+        }
+        return true;
+    }
     async doRenderTemplate() {
         let value = uToE(this.getValue());
+        console.log('doRenderTemplate', this.name, value);
         if (!value) {
             this.renderInfo = { rendering: false, error: null, result: null };
+            if (this.name == 'generator') {
+                jFireEvent(this, "generator-result", { generatorResult: null });
+            }
             return;
         }
         this.renderInfo.rendering = true; // = { rendering: true, error: null, result: null };
         let nameToUse = (this.namePrefix? (this.namePrefix+'.') : '') + this.name;
         let retv;
-        //console.log('doRenderTemplate', this.name, this.genResult);
         let extraVars = this.genResult ? this.genResult.firstElemVars : {};
         this.requestUpdate(); // since changed renderInfo
         try {
@@ -1710,7 +1728,8 @@ class Alert2CfgField extends LitElement {
                                 result: null };
             return;
         }
-        let resp = { rendering: false };
+        console.log('doRenderTemplate RESPONSE ', this.name, retv);
+        let resp = { rendering: false, error: null, result: null };
         if (Object.hasOwn(retv, 'error')) {
             resp.error = retv.error;
         }
@@ -1718,7 +1737,7 @@ class Alert2CfgField extends LitElement {
             console.log(this.name, ' got render result ', retv.rez);
             resp.result = retv.rez;
         }
-        if (Object.keys(resp).length == 1) {
+        if (!Object.hasOwn(retv, 'error') && !Object.hasOwn(retv, 'rez')) {
             this.renderInfo = { rendering: false, error: 'bad result: ' + JSON.stringify(retv),
                                 result: null };
         } else {
@@ -1727,6 +1746,7 @@ class Alert2CfgField extends LitElement {
                 jFireEvent(this, "generator-result", { generatorResult: resp.result });
             }
         }
+        console.log('doRenderTemplate FINALY ', this.name, this.renderInfo);
     }
     setConfig(config) {
         this._cardConfig = config;
@@ -1750,7 +1770,7 @@ class Alert2CfgField extends LitElement {
         this.renderD(); 
     }
     _change(ev) {
-        this.showRendered = true;
+        //this.showRendered = true;
         let value = ev.detail?.value || ev.target.value;
         console.log('_change happend with ', ev.detail.value, ev.target.value);
         let parentP = this.currP;
@@ -1859,7 +1879,7 @@ class Alert2CfgField extends LitElement {
         if (this.expanded) {
             helpHtml = `<slot name="help" class="shelp"></slot>`;
         }
-        if (this.showRendered) {
+        if (true || this.showRendered) {
             let renderedStr = ''+displayStr(this.renderInfo.result);
             let lenStr = '';
             if (this.type == FieldTypes.STR) {
@@ -1998,6 +2018,12 @@ class Alert2EditDefaults extends LitElement {
         super.connectedCallback();
         this.refresh();
     }
+    //shouldUpdate(changedProps) {
+    //    if (changedProps.has('hass')) {
+    //        console.log('Alert2EditDefaults hass updated');
+    //    }
+    //    return true;
+    //}
     async refresh() {
         console.log('doing refresh');
         let retv;
@@ -2458,7 +2484,7 @@ class Alert2Create extends LitElement {
           <div class="doutput">
             <h3>Output</h3>
             <div style="margin-bottom: 1em;">Entity name: <code>${entName}</code></div>
-            <div>YAML:</div>
+            <div>Equivalent YAML:</div>
             <pre class="output">${yaml}</pre>
 
             <hr style="width:60%; max-width: 10em; margin-left: 0; margin-top: 2em;">

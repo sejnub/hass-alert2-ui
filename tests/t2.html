@@ -97,9 +97,10 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             //jassert(await startTest(doTest1));
-             //jassert(await startTest(doTest2));
+             jassert(await startTest(doTest1));
+             jassert(await startTest(doTest2));
              jassert(await startTest(doTest3));
+             jassert(await startTest(doTest4));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -181,7 +182,7 @@
                  return e;
              }
          }
-         async function initTest(eName, yamlCfg) {
+         async function initTest(eName, extraParams) {
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
                  callApi: callApi,
@@ -189,22 +190,27 @@
              let ao = document.createElement(eName);
              console.log('ao is ', ao, eName);
              ao.hass = newHass;
+             if (extraParams) {
+                 Object.assign(ao, extraParams);
+             }
              if (eName == 'alert2-create') {
                  ao.didSomethingCb = ()=>{console.log('alert2-create didSomethingCb'); };
              }
              testDiv.appendChild(ao);
-             let c = 0;
-             while (true) {
-                 await sleepMs(10);
-                 //if (ao.innerHTML) { break; }
-                 let tt = ao.shadowRoot.querySelector(`alert2-cfg-field[name="notifier"]`);
-                 if (tt) { break; }
-                 console.log('no ao :(...', !!tt);
-                 jassert(c < 50);
-                 c++;
+             let z = {ao: ao};
+             if (['alert2-create','alert2-edit-defaults'].includes(eName)) {
+                 let c = 0;
+                 while (true) {
+                     await sleepMs(10);
+                     //if (ao.innerHTML) { break; }
+                     let tt = ao.shadowRoot.querySelector(`alert2-cfg-field[name="notifier"]`);
+                     if (tt) { break; }
+                     console.log('no ao :(...', !!tt);
+                     jassert(c < 50);
+                     c++;
+                 }
+                 Object.assign(z, createHelpers(ao));
              }
-             let z = createHelpers(ao);
-             z.ao = ao;
              return z;
          }
          async function startTest(afunc) {
@@ -704,12 +710,24 @@
              let z = await initTest('alert2-create');
              await sleepMs(10); // seems to help dom get itself sorted out
 
+             // Create fails - missing fields
              await z.setField('domain', 'd1');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(/required key.*domain/);
 
+             // So does validate
              await z.setField('name', 'n1');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.validateB'));
+             z.checkErr(/must contain at least one of/);
+             
+             // Complete fields, validate succeeds
              await z.setField('condition', 'off');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.validateB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}}})
+             
+             // So does create
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(null);
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
@@ -726,6 +744,27 @@
                               { domain: 'd1', name: 'n1', condition: 'off' }
                           ]}})
 
+             // Update
+             await z.setField('condition', 'false');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.updateB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'false' }
+                          ]}})
+
+             // Update won't create
+             await z.setField('condition', 'false');
+             await z.setField('name', 'n2');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.updateB'));
+             z.checkErr(/can not find existing/);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'false' }
+                          ]}})
+             await z.setField('name', 'n1');
+             
+             // Delete succeeds
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.deleteB'));
              z.checkErr(null);
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
@@ -737,9 +776,175 @@
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {} } })
 
+             // Let's check generator updating
+             await z.setField('name', '{{genElem}}');
+             await z.checkRender('name', /result:""/);
+             await z.setField('generator', 'f2');
+             await sleepMs(50); // extra sleep needed for some reason ;(
+             await z.checkRender('name', /result:"f2"/);
+             await z.setField('generator', '');
+             await z.checkRender('name', /result:""/);
+
+             // Create a generator
+             await z.setField('generator', 'f3');
+             await z.setField('generator_name', 'g1');
+             await z.setField('name', '{{genElem}}');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: '{{genElem}}', condition: 'false', generator_name:'g1',
+                              generator: 'f3' }
+                          ]}})
+
+             // Create a simple alert
+             await z.setField('generator', '');
+             await z.setField('generator_name', '');
+             await z.setField('name', 'n2');
+             await z.setField('delay_on_secs', '3');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: '{{genElem}}', condition: 'false', generator_name:'g1',
+                              generator: 'f3' },
+                              { domain: 'd1', name: 'n2', condition: 'false', delay_on_secs: '3' }
+                          ]}})
+
+             // Now let's reopen the create dialog as if editing existing alert
+             z.ao.remove();
+             z = await initTest('alert2-create', {entInfo: { domain: 'd1', name: 'n2' }});
+             console.log('opened existing dialog..............');
+             await sleepMs(50); // extra sleep needed for some reason ;(
+             await z.checkField('domain', 'd1');
+             await z.checkRender('domain', 'result:"d1"');
+             await z.checkField('name', 'n2');
+             await z.checkField('delay_on_secs', '3');
+
+             // Try updating it
+             await z.setField('delay_on_secs', '4');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.updateB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: '{{genElem}}', condition: 'false', generator_name:'g1',
+                              generator: 'f3' },
+                              { domain: 'd1', name: 'n2', condition: 'false', delay_on_secs: '4' }
+                          ]}})
+
+             // Now reopen dialog of generator alert
+             z.ao.remove();
+             z = await initTest('alert2-create', {entInfo: { domain: 'alert2generator', name: 'g1' }});
+             await sleepMs(50); // extra sleep needed for some reason ;(
+             await z.checkField('domain', 'd1');
+             await z.checkField('name', '{{genElem}}');
+             await z.checkRender('name', 'result:"f3"');
+             await z.checkField('delay_on_secs', null);
              
-             //z.ao.remove();
+             // Try updating it
+             await z.setField('name', '{{genElem}}z');
+             await z.checkRender('name', 'result:"f3z"');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.updateB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: '{{genElem}}z', condition: 'false', generator_name:'g1',
+                              generator: 'f3' },
+                              { domain: 'd1', name: 'n2', condition: 'false', delay_on_secs: '4' }
+                          ]}})
+             
+             z.ao.remove();
          }
+         async function doTest4() {
+             let z = await initTest('alert2-manager');
+             await sleepMs(10); // seems to help dom get itself sorted out
+
+             async function waitSearch() {
+                 while (true) {
+                     await sleepMs(10);
+                     let s = z.ao.getSearchStatus();
+                     console.log('fuck', s.rez);
+                     if (s.inProgress === false) { return s.rez; }
+                 }
+             }
+             
+             // Check when there are no alerts in existence
+             jasserteq((await waitSearch()).results.length, 0);
+             let rs = z.ao.shadowRoot.querySelectorAll('div.results div');
+             jasserteq(rs.length, 0);
+             z.ao.remove();
+
+             // Now create a few alerts
+             z = await initTest('alert2-create');
+             await sleepMs(10); // seems to help dom get itself sorted out
+             await z.setField('domain', 'd1');
+             await z.setField('name', 'n1');
+             await z.setField('condition', 'off');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'off' }
+                          ]}})
+             await z.setField('name', 'n2');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'off' },
+                              { domain: 'd1', name: 'n2', condition: 'off' }
+                          ]}})
+             await z.setField('name', 'n3');
+             await z.setField('generator', 'n3');
+             await z.setField('generator_name', 'g1');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'n1', condition: 'off' },
+                              { domain: 'd1', name: 'n2', condition: 'off' },
+                              { domain: 'd1', name: 'n3', condition: 'off', generator_name:'g1',generator:'n3' }
+                          ]}})
+             z.ao.remove();
+
+             z = await initTest('alert2-manager');
+             await sleepMs(100);
+             jasserteq((await waitSearch()).results.length, 3);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             jasserteq(rs.length, 3);
+
+             // Type a search term
+             let txtf = z.ao.shadowRoot.querySelector('ha-textfield');
+             jassert(txtf);
+             jFireEvent(txtf, 'input', { value: 'z' });
+             //txtf.value = 'z';
+             await sleepMs(100);
+             jasserteq((await waitSearch()).results.length, 0);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             jasserteq(rs.length, 0);
+
+             jFireEvent(txtf, 'input', { value: 'n' });
+             await sleepMs(100);
+             jasserteq((await waitSearch()).results.length, 3);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             jasserteq(rs.length, 3);
+
+             jFireEvent(txtf, 'input', { value: 'n1' });
+             await sleepMs(100);
+             jasserteq((await waitSearch()).results.length, 1);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             jasserteq(rs.length, 1);
+             jassertObjeq(z.ao.getSearchStatus().rez, { results: [ { id: 'alert2.d1_n1', domain: 'd1', name: 'n1' }]});
+             
+             jFireEvent(txtf, 'input', { value: 'g1' });
+             await sleepMs(100);
+             jasserteq((await waitSearch()).results.length, 1);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             jasserteq(rs.length, 1);
+             console.log(z.ao.getSearchStatus().rez);
+             jassertObjeq(z.ao.getSearchStatus().rez, { results: [ { id: 'sensor.alert2generator_g1', domain: 'alert2generator', name: 'g1' }]});
+         }
+
         </script>
     </head>
     <body>
