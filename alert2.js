@@ -1926,8 +1926,10 @@ class Alert2CfgField extends LitElement {
         // vertical error bar
         //${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
         //console.log(this.name, 'default', defaultValue, typeof(defaultValue));
+        let helpButtom = html``;
         return html`<div class="cfield">
-                      <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:</div>
+                      <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:
+                      </div>
                       <div class="editfs" style="display: flex; flex-flow: column;">
                          <div class="avalue">${editElem}</div>
                          <div style="margin-left: 0em;">${helpHtml}</div>
