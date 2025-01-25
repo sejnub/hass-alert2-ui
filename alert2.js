@@ -1926,9 +1926,15 @@ class Alert2CfgField extends LitElement {
         // vertical error bar
         //${this.renderInfo.error != null ? html`<div style="background: var(--warning-color); height:1.5em; width: 0.3em; margin-right:0.3em;"></div>`:""}
         //console.log(this.name, 'default', defaultValue, typeof(defaultValue));
-        let helpButtom = html``;
+        //let helpButton = `<ha-icon-button><ha-icon .icon=${"mdi:help-circle"} ></ha-icon></ha-icon-button>`;
+        let helpButton = html`<ha-icon .icon=${"mdi:help-circle"} class="helpi"></ha-icon>`;
+        //<mwc-icon-button .label=${"dismiss"} dialogAction="cancel" slot="navigationIcon" ><ha-icon .icon=${"mdi:close"} ></ha-icon>
+        //    </mwc-icon-button>
+        //let helpButtom = html`<ha-icon-button .path=${helpPath} class="help-icon"></ha-icon-button>`;
         return html`<div class="cfield">
-                      <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >${unsavedChange}${this.name}${this.required ? "*":""}:
+                      <div class=${this.namePrefix?"threshname":"name"} @click=${this._click} >
+                           ${unsavedChange}<span>${this.name}${this.required ? "*":""}:</span>
+                          ${helpButton}
                       </div>
                       <div class="editfs" style="display: flex; flex-flow: column;">
                          <div class="avalue">${editElem}</div>
@@ -1948,14 +1954,17 @@ class Alert2CfgField extends LitElement {
        .cfield {
           display: flex;
           flex-flow: row wrap;
-          align-items: center;
+          align-items: start;
           margin-bottom: 1em;
        }
        .name, .threshname {
           margin-right: 1em;
+          margin-top: 1em;
           cursor: pointer;
           /*min-width: 10em;*/
           flex: 0 0 14em;
+          display: flex;
+          align-items: center;
        }
        .threshname {
           flex: 0 0 12.5em;
@@ -1970,6 +1979,10 @@ class Alert2CfgField extends LitElement {
        .rendered {
           font-family: ui-monospace, monospace;
        }
+       ha-icon.helpi {
+        --mdc-icon-size:1.3em;
+        margin-left: 0.3em;
+       } 
      }
     `;
 }
@@ -1992,11 +2005,20 @@ function closeOtherExpanded(elem, ev) {
 
 let helpCommon = {
     notifier: html`Name of notifiers to use for sending notifications. Can be:
-                  <ul><li>Single notifier or name of entity with list: <code>telegram1</code>
-                      <li>List of notifiers: <code>[ telegram1, telegram2 ]</code>
-                      <li>Template producing list of notifiers: <code>{{ [ "tel1", "tel2" ] }}</code>
-                  </ul>`,
+                  <div class="extable"><div>Single notifier or name of entity with list</div>
+                                              <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                         <div>List of notifiers:</div><div><code>[ telegram1, telegram2 ]</code></div>
+                      <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                  </div>`,
+    summary_notifier: html`Name of notifiers to use for sending summary notifications. Can be:
+                  <div class="extable"><div>Single notifier or name of entity with list</div>
+                                              <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                         <div>List of notifiers:</div><div><code>[ telegram1, telegram2 ]</code></div>
+                      <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                  </div>`,
 };
+
+let topCommon = html``;
 
 
 
@@ -2056,7 +2078,11 @@ class Alert2EditDefaults extends LitElement {
         } catch (err) {
             this._saveInProgress = false;
             abutton.actionError();
-            this._serverErr = "error: " + err.message;
+            if (err.body && err.body.message) {
+                this._serverErr = "error: " + err.body.message;
+            } else {
+                this._serverErr = "error: " + JSON.stringify(err);
+            }
             return;
         }
         this._saveInProgress = false;
@@ -2085,6 +2111,15 @@ class Alert2EditDefaults extends LitElement {
         }
         return html`
          <div class="container" >
+            <div style="margin-bottom: 1em;">
+                Set defaults and parameters affecting all alerts
+                <ul><li>Values set here override any values set in YAML
+                <li>Typing in any field will promptly be followed by "Render result", showing how Alert2 interpreted the setting.
+                <li><code>notifier_startup_grace_secs</code> and <code>defer_startup_notifications</code> require an HA restart before they come into affect.
+                <li>All other fields immediately affect new alerts. You can go to "Developer tools" -> YAML and click on "Alert2" to reload both YAML and UI Alert2 alerts with the new settings.
+                <li>See <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
+                </ul>
+            </div>
             <h3>Default alert parameters</h3>
             <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
                  templateType=${TemplateTypes.LIST} .defaultP=${this._topConfigs.rawYaml.defaults}
@@ -2096,9 +2131,7 @@ class Alert2EditDefaults extends LitElement {
                  templateType=${TemplateTypes.LIST} .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
                   .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.summary_notifier}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="annotate_messages" type=${FieldTypes.BOOL}
                  .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
@@ -2160,12 +2193,28 @@ class Alert2EditDefaults extends LitElement {
        margin-top: 0.1em;
        margin-bottom: 0;
     }
+    div.extable {
+       display: grid;
+       grid-template-columns: repeat(2,minmax(auto,max-content));
+       column-gap: 1.5em;
+       margin-left: 1em;
+    }
+    div.extable div.bigor {
+        display: inline-block;
+        width: 3.5em;
+        text-align: center;
+    }
       `;
 }
 
 function yamlEscape(astr, removeNewline=true) {
     const format = /[{}\[\]&*#?|\-<>=!%@:`,]/;
-    astr = astr.replace('\n', ' ');
+    astr = astr.trim().replace('\n', ' ');
+    if (astr.length > 0 && (astr[0] == '\'' || astr[0] == '"')) {
+        // yaml quoted string, so don't need quotes around anything I think.
+        // TODO - verify this logic is correct.
+        return astr;
+    }
     if (format.test(astr)) {
         return '"' + astr.replace('"', '\\"') + '"';
     } else {
@@ -2247,12 +2296,18 @@ class Alert2Create extends LitElement {
             obj[opName] = this.alertCfg;
             rez = await this.hass.callApi('POST', 'alert2/manageAlert', obj);
         } catch (err) {
+            console.log(opName, 'CAUGHT ERR', err);
             this._opInProgress.inProgress = false;
-            this.requestUpdate();
             abutton.actionError();
-            this._serverErr = "error: " + err.message;
+            if (err.body && err.body.message) {
+                this._serverErr = "error: " + err.body.message;
+            } else {
+                this._serverErr = "error: " + JSON.stringify(err);
+            }
+            this.requestUpdate();
             return;
         }
+        console.log(opName, ' OP OK? ', rez);
         this._opInProgress.inProgress = false;
         if (rez.error) {
             abutton.actionError();
@@ -2334,6 +2389,14 @@ class Alert2Create extends LitElement {
         return html`
          <div class="container">
          <div class="ifields">
+            <div style="margin-bottom: 1em;">
+                Create a new UI alert or edit an existing UI alert.
+                <ul><li>Typing in any field will promptly be followed by "Render result", showing how Alert2 interpreted the setting.
+                <li>This page can only be used to modify alerts created via the UI. It will not affect any alerts in YAML.
+                <li>If using a generator, the "Render result" line for all fields will update based on the first element produced by the generator.
+                <li>See <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
+                </ul>
+            </div>
             <h3>Entity name</h3>
             <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
@@ -2424,16 +2487,12 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
                   .savedP=${{}} .currP=${this.alertCfg} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.notifier}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="summary_notifier" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
                   .savedP=${{}} .currP=${this.alertCfg} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.summary_notifier}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="title" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >

@@ -175,15 +175,25 @@
                  },
                  body: JSON.stringify(opts),
              };
+             let fetchResponse;
+             let data;
              try {
-                 const fetchResponse = await fetch(`http://localhost:50005/api/${method}`, settings);
-                 const data = await fetchResponse.json();
-                 console.log('got response to', method, opts, '   as   ', data);
-                 return data;
+                 fetchResponse = await fetch(`http://localhost:50005/api/${method}`, settings);
+                 data = await fetchResponse.json();
              } catch (e) {
                  console.error(method, opts, e);
-                 return e;
+                 throw e;
              }
+             console.log('got response to', method, opts, '   as   ', data, 'ok=',fetchResponse.ok);
+             if (!fetchResponse.ok) {
+                 throw {
+                     error: `Response error: ${fetchResponse.status} with msg=${data.message}`,
+                     status_code: fetchResponse.status,
+                     message: data.message,
+                     body: data
+                 };
+             }
+             return data;
          }
          async function initTest(eName, extraParams) {
              let newHass = {
@@ -420,7 +430,7 @@
              z.ao.remove();
              await sleepMs(11);
              z = await initTest('alert2-edit-defaults');
-             await sleepMs(11);
+             await sleepMs(100);
              z.checkField('notifier', 'foo');
              // Now remove foo 
              await z.setField('notifier', '');
@@ -732,6 +742,18 @@
              let z = await initTest('alert2-create');
              await sleepMs(10); // seems to help dom get itself sorted out
 
+             // Update with empty fields fails
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.updateB'));
+             z.checkErr(/required key not provided/);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} } })
+             // Delete with empty fields fails
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.deleteB'));
+             z.checkErr(/required key not provided/);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {} } })
+
+             
              // Create fails - missing fields
              await z.setField('domain', 'd1');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
