@@ -2012,133 +2012,133 @@ let helpCommon = {
     notifier: html`Name of notifiers to use for sending notifications. Can be:
                   <div class="extable">
                        <div>Single notifier or name of entity with list:</div>
-                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
-                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
-                       <div>List of notifiers (YAML):</div><div><pre>- telegram1\n- telegram2</code></pre></div>
-                       <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                           <div class="exval"><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                       <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
+                       <div>List of notifiers (YAML):</div><div class="exval"><pre>- telegram1\n- telegram2</code></pre></div>
+                       <div>Template producing list of notifiers:</div><div class="exval"><code>{{ [ "tel1", "tel2" ] }}</code></div>
                   </div>`,
     summary_notifier: html`Name of notifiers to use for sending summary notifications. Can be:
                   <div class="extable">
                        <div>Single notifier or name of entity with list</div>
-                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
-                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
-                       <div>List of notifiers (YAML):</div><div><pre>- telegram1\n- telegram2</code></pre></div>
-                      <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                           <div class="exval"><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                       <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
+                       <div>List of notifiers (YAML):</div><div class="exval"><pre>- telegram1\n- telegram2</code></pre></div>
+                      <div>Template producing list of notifiers:</div><div class="exval"><code>{{ [ "tel1", "tel2" ] }}</code></div>
                   </div>`,
     annotate_messages: html`If true, add extra context information to notifications, like number of times alert has fired since last notification. Can be:
                   <div class="extable">
-                         <div>Truthy (true/yes/on/1 or opposites)</div><div><code>true</code></div>
+                         <div>Truthy (true/yes/on/1 or opposites)</div><div class="exval"><code>true</code></div>
                   </div>`,
     reminder_frequency_mins: html`Interval in minutes between reminders that a condition alert continues to fire. Can be:
                   <div class="extable">
-                          <div>Single float (>= 0.01)</div><div><code>10</code></div>
-                         <div>List of floats:</div><div><code>[ 10, 15 ]</code></div>
+                          <div>Single float (>= 0.01)</div><div class="exval"><code>10</code></div>
+                         <div>List of floats:</div><div class="exval"><code>[ 10, 15 ]</code></div>
                   </div>`,
     throttle_fires_per_mins: html`Limit notifications of alert firings based on a list of two numbers [X, Y]. If the alert has fired and notified more than X times in the last Y minutes, then throttling turns on and no further notifications occur until the rate drops below the threshold. Can be:
-                  <div class="extable"><div>List of [int, float]</div>
-                                              <div><code>[3, 5.2]</code></div>
+                  <div class="extable">
+                          <div>List of [int, float]</div><div class="exval"><code>[3, 5.2]</code></div>
                   </div>`,
     domain: html`Alert entity name is alert2.[domain]_[name]. Can be:
                   <div class="extable">
-                       <div>Letters, numbers, underscore</div><div><code>test</code><div class="bigor">or</div><code>boiler</code></div>
+                       <div>Letters, numbers, underscore</div><div class="exval"><code>test_domain</code></div>
                   </div>`,
     name: html`Alert entity name is alert2.[domain]_[name]. Can be:
                   <div class="extable">
-                       <div>Letters, numbers, underscore</div><div><code>test</code><div class="bigor">or</div><code>boiler</code></div>
+                       <div>Letters, numbers, underscore</div><div class="exval"><code>too_hot</code></div>
                   </div>`,
     friendly_name: html`Name to display instead of the entity name. Can be:
                   <div class="extable">
-                       <div>Simple string</div><div><code>my test alert</code></div>
-                       <div>Template (eg using generator variables)</div><div><code>battery {{genElem}}</code></div>
+                       <div>Simple string</div><div class="exval"><code>my test alert</code></div>
+                       <div>Template (eg using generator variables)</div><div class="exval"><code>battery {{genElem}}</code></div>
                   </div>`,
-    condition: html`If specified, must be truthy for alert to fire. Can be:
+    condition: html`If specified, must be true-truthy for alert to fire. Can be:
                   <div class="extable">
-                       <div>Truthy value (true/yes/on/1 or opposites)</div><div><code>on</code></div>
-                       <div>Entity name containing truthy value</div><div><code>binary_sensor.trouble</code></div>
-                       <div>Template evaluating to truthy</div><div><code>{{ states('sensor.foo')|float > 3 }}</code></div>
+                       <div>Truthy value (true/yes/on/1 or opposites)</div><div class="exval"><code>on</code></div>
+                       <div>Entity name containing truthy value</div><div class="exval"><code>binary_sensor.trouble</code></div>
+                       <div>Template evaluating to truthy</div><div class="exval"><code>{{ states('sensor.foo')|float > 3 }}</code></div>
                   </div>`,
-    trigger: html`Alert first the moment the trigger triggers if any condition specified is also true. Can be:
+    trigger: html`Alert when the trigger triggers if any condition specified is also true. Can be:
                   <div class="extable">
-                       <div>A YAML <a href="https://www.home-assistant.io/docs/automation/trigger/">trigger</a> spec written using YAML flow notation.</div><div><code>[{'platform':'state','entity_id':'sensor.zz'}]</code></div>
-                       <div></div><div><code>[{'trigger':'template','value_template':'{{ true }}'}]</code></div>
+                       <div>A YAML <a href="https://www.home-assistant.io/docs/automation/trigger/">trigger</a> spec written using YAML flow notation.</div><div class="exval"><pre>[{'platform':'state','entity_id':'sensor.zz'}]\n[{'trigger': 'mqtt', 'topic': 'living_room/switch/ac', 'payload': "on"}]</pre></div>
                   </div>`,
     value: html`A float or template or entity name evaluating to a float. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>3.5</code></div>
-                       <div>Entity name</div><div><code>sensor.room_temperature</code></div>
-                       <div>Float</div><div><code>3.5</code></div>
-                       <div>Template</div><div><code>{{ states('sensor.foo') }}/code></div>
+                       <div>Float</div><div class="exval"><code>3.5</code></div>
+                       <div>Entity name</div><div class="exval"><code>sensor.room_temperature</code></div>
+                       <div>Template</div><div class="exval"><code>{{ states('sensor.foo') }}</code></div>
                   </div>`,
-    hysteresis: html`Compare <code>value</code> to limits using hysteresis. threshold is considered exceeded if value exceeds min/max, but does not reset until value increases past min+hysteresis or decreases past max-hysteresis. . Can be:
+    hysteresis: html`Compare <code>value</code> to limits using hysteresis. Threshold is considered exceeded if value exceeds min/max, but does not reset until value increases past min+hysteresis or decreases past max-hysteresis. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>4.2</code></div>
+                       <div>Float</div><div class="exval"><code>4.2</code></div>
                   </div>`,
-    maximum: html`Maximum acceptable value for value. Can be:
+    maximum: html`Alert fires if <code>value</code> is above maximum. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>30</code></div>
+                       <div>Float</div><div class="exval"><code>30</code></div>
                   </div>`,
-    minimum: html`Minimum acceptable value for value. Can be:
+    minimum: html`Alert fires if <code>value</code> is below minimum. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>-2</code></div>
+                       <div>Float</div><div class="exval"><code>-2</code></div>
                   </div>`,
     delay_on_secs: html`Number of seconds that any condition must be true and any threshold specified must be exceeded before the alert starts firing. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>5</code></div>
+                       <div>Float</div><div class="exval"><code>5</code></div>
                   </div>`,
     early_start: html`By default, alert monitoring starts only once HA has fully started (i.e., after the HOMEASSISTANT_STARTED event). If early_start is true for an alert, then monitoring of that alert starts earlier, as soon as the alert2 component loads. Can be:
                   <div class="extable">
-                       <div>Truthy boolean (eg true/yes/on or opposites)</div><div><code>false</code></div>
+                       <div>Truthy (eg true/yes/on or opposites)</div><div class="exval"><code>false</code></div>
                   </div>`,
     generator: html`A <a href="https://github.com/redstone99/hass-alert2#generator-patterns">generator pattern</a> for declaring mulitple alerts. Can be:
                   <div class="extable">
-                       <div>Single string</div><div><code>battery1</code></div>
-                       <div>List of strings</div><div><code>[ battery1, battery2 ]</code></div>
-                       <div>List of entity names</div><div><code>[ sensor.battery1, sensor.battery2 ]</code></div>
-                       <div>Entity name with list of strings</div><div><code>sensor.my_list</code></div>
-                       <div>Template producing list of strings</div><div><code>{{ [ "a", "b" ] }}</code></div>
-                       <div>Template producing list of dicts using entity_regex</div><div><code>{{ sensors|entity_regex('sensor.my_battery(\d+)')|list }}</code></div>
+                       <div>Single string</div><div class="exval"><code>battery1</code></div>
+                       <div>List of strings</div><div class="exval"><code>[ battery1, battery2 ]</code></div>
+                       <div>List of entity names</div><div class="exval"><code>[ sensor.battery1, sensor.battery2 ]</code></div>
+                       <div>Entity name with list of strings</div><div class="exval"><code>sensor.my_list</code></div>
+                       <div>Template producing list of strings</div><div class="exval"><code>{{ [ "a", "b" ] }}</code></div>
+                       <div>Template producing list of dicts using entity_regex</div><div class="exval"><code>{{ sensors|entity_regex('sensor.my_battery(\d+)')|list }}</code></div>
                   </div>`,
     generator_name: html`Each generator creates a sensor entity with the name sensor.alert2generator_[generator_name].. Can be:
                   <div class="extable">
-                       <div>String</div><div><code>all_batteries</code></div>
+                       <div>String</div><div class="exval"><code>all_batteries</code></div>
                   </div>`,
     message: html`Text to send with notifications. Can be:
                   <div class="extable">
-                       <div>String</div><div><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
-                       <div>Template</div><div><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                       <div>String</div><div class="exval"><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
+                       <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
                   </div>`,
     done_message: html`Message to send when a condition alert turns off. Replaces the default message. Can be:
                   <div class="extable">
-                       <div>String</div><div><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
-                       <div>Template</div><div><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                       <div>String</div><div class="exval"><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
+                       <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
                   </div>`,
     title: html`Passed as the <code>title</code> parameter to the notify service call. Can be:
                   <div class="extable">
-                       <div>String</div><div><code>foo bar</code></div>
-                       <div>Template</div><div><code>{{ states('sensor.foo') }}</code></div>
+                       <div>String</div><div class="exval"><code>foo bar</code></div>
+                       <div>Template</div><div class="exval"><code>{{ states('sensor.foo') }}</code></div>
                   </div>`,
     target: html`Passed as the <code>target</code> parameter to the notify service call. Can be:
                   <div class="extable">
-                       <div></div><div><code></code></div>
+                       <div>String</div><div class="exval"><code>foo bar</code></div>
+                       <div>Template</div><div class="exval"><code>{{ states('sensor.foo') }}</code></div>
                   </div>`,
     data: html`Passed as the <code>data</code> parameter to the notify service call. Can be:
                   <div class="extable">
-                       <div>YAML dictionary</div><div><code>{ val1: 3, val2: foo }</code></div>
+                       <div>YAML dict (flow notation)</div><div class="exval"><code>{ val1: 3, val2: foo }</code></div>
+                       <div>YAML dict:</div><div class="exval"><pre>val1: 3\nval2: foo</code></pre></div>
                   </div>`,
     skip_internal_errors: html`If true, an entity for alert2.error will not be created, you will not receive any notifications for problems with your config file or Alert2 internal errors, and such errors won't show up in the Alert2 UI card. Errors will still appear in the log file. Can be:
                   <div class="extable">
-                       <div>Truthy (true/on/yes/1 or opposites)</div><div><code>false</code></div>
+                       <div>Truthy (true/on/yes/1 or opposites)</div><div class="exval"><code>false</code></div>
                   </div>`,
     notifier_startup_grace_secs: html`Time to wait after HA starts for a notifier to be defined. Can be:
                   <div class="extable">
-                       <div>Float</div><div><code>60</code></div>
+                       <div>Float</div><div class="exval"><code>60</code></div>
                   </div>`,
     defer_startup_notifications: html`True means no notifications are sent until notifier_startup_grace_secs passes after startup. False means send notifications as soon as the notifier is defined in HA. Or this parameter can be name of a single notifier or list of notifiers for those to defer during startup. Can be:
                   <div class="extable">
-                       <div>Truthy (yes/on/true/1 or opposites)</div><div><code>true</code></div>
+                       <div>Truthy (yes/on/true/1 or opposites)</div><div class="exval"><code>true</code></div>
                        <div>Single notifier:</div>
-                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code></div>
-                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
+                           <div class="exval"><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code></div>
+                       <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
                   </div>`,
     //: html`. Can be:
     //              <div class="extable">
@@ -2149,7 +2149,32 @@ let helpCommon = {
 
 let topCommon = html``;
 
-
+const extableCss = css`
+    div[slot="help"] > ul {
+       margin-top: 0.1em;
+       margin-bottom: 0;
+    }
+    div.extable {
+       display: grid;
+       grid-template-columns: repeat(2,minmax(auto,max-content));
+       column-gap: 1.5em;
+       margin-left: 1em;
+    }
+    div.extable div.bigor {
+        display: inline-block;
+        width: 3.5em;
+        text-align: center;
+    }
+    div.extable pre {
+        margin: 0;
+        display: inline-block; /* so :before shows up on same line */
+    }
+    div.extable div.exval:before {
+        content: "e.g. ";
+        vertical-align: top;
+        margin-right: 0.5em;
+    }
+`;
 
 class Alert2EditDefaults extends LitElement {
     static properties = {
@@ -2241,11 +2266,11 @@ class Alert2EditDefaults extends LitElement {
         return html`
          <div class="container" >
             <div style="margin-bottom: 1em;">
-                Set defaults and parameters affecting all alerts.
+                Set defaults and parameters affecting all alerts. Click "Save" (at the bottom) when done.
                 <ul><li>Values set here override any values set in YAML
                <li>You can go to "Developer tools" -> YAML and click on "Alert2" to reload both YAML and UI Alert2 alerts with the new settings. <code>notifier_startup_grace_secs</code> and <code>defer_startup_notifications</code> require an HA restart.
                 <li>Click on any field name for brief help and see <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
-
+                <li>Fields are generally interpreted as YAML, with some logic to add quotes if writing a template.
                 </ul>
             </div>
             <h3>Default alert parameters</h3>
@@ -2305,24 +2330,7 @@ class Alert2EditDefaults extends LitElement {
     h3:first-of-type {
        margin-top: 0em;
     }
-    div[slot="help"] > ul {
-       margin-top: 0.1em;
-       margin-bottom: 0;
-    }
-    div.extable {
-       display: grid;
-       grid-template-columns: repeat(2,minmax(auto,max-content));
-       column-gap: 1.5em;
-       margin-left: 1em;
-    }
-    div.extable div.bigor {
-        display: inline-block;
-        width: 3.5em;
-        text-align: center;
-    }
-    div.extable pre {
-        margin: 0;
-    }
+    ${extableCss}
       `;
 }
 
@@ -2510,10 +2518,10 @@ class Alert2Create extends LitElement {
          <div class="ifields">
             <div style="margin-bottom: 1em;">
                 Create a new UI alert or edit an existing UI alert.
-                <ul><li>Typing in any field will promptly be followed by "Render result", showing how Alert2 interpreted the setting.
-                <li>This page can only be used to modify alerts created via the UI. It will not affect any alerts in YAML.
+                <li>This page can only modify alerts created via the UI. It will not affect any alerts in YAML.
                 <li>If using a generator, the "Render result" line for all fields will update based on the first element produced by the generator.
                 <li>See <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
+                <li>Fields are generally interpreted as YAML, with some logic to add quotes if writing a template.
                 </ul>
             </div>
             <h3>Entity name</h3>
@@ -2663,6 +2671,7 @@ class Alert2Create extends LitElement {
         padding: 8px;
         whitespace: pre-wrap;
      }
+     ${extableCss}
       `;
     _topRadioClick(ev) {
         let value = ev.detail?.value || ev.target.value;
