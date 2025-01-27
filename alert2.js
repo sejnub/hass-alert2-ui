@@ -1581,12 +1581,12 @@ class Alert2Manager extends LitElement {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
         innerElem.didSomethingCb = ()=>{ this.fetchD(); };
-        jCreateDialog(this, 'a new alert?', innerElem);
+        jCreateDialog(this, 'Create/edit alert', innerElem);
     }
     async editDefaults(ev) {
         let innerElem = document.createElement('alert2-edit-defaults');
         innerElem.hass = this._hass;
-        jCreateDialog(this, 'Alert2 Defaults', innerElem);
+        jCreateDialog(this, 'Edit defaults', innerElem);
     }
     static styles = css`
       .card-header {
@@ -1938,7 +1938,6 @@ class Alert2CfgField extends LitElement {
                       </div>
                       <div class="editfs" style="display: flex; flex-flow: column;">
                          <div class="avalue">${editElem}</div>
-                         <div style="margin-left: 0em;">${helpHtml}</div>
                          ${hasDefault ? html`<div class="defaultInfo">Default if empty: <code>${displayStr(defaultValue)}</code></div>`:''}
                          <div class="renderInfo">
                             ${this.renderInfo.rendering ?
@@ -1947,10 +1946,15 @@ class Alert2CfgField extends LitElement {
                               html`<ha-alert alert-type=${"warning"} style="display: inline-block;">${this.renderInfo.error}</ha-alert>` : ""}
                             ${renderHtml}
                          </div>
+                         <div style="margin-left: 0em;">${helpHtml}</div>
                       </div>
                     </div>`;
     }
     static styles = css`
+       .renderInfo {
+          display: flex;
+          flex-direction: row;
+        }
        .cfield {
           display: flex;
           flex-flow: row wrap;
@@ -1989,6 +1993,7 @@ class Alert2CfgField extends LitElement {
 
 function uToE(val) { return (val == undefined) ? '' : (val); }
 function closeOtherExpanded(elem, ev) {
+    return;
     // Unexpand other fields when one expands.
     let expanded = ev.detail?.expanded;
     let targetEl = ev.target;
@@ -2005,17 +2010,126 @@ function closeOtherExpanded(elem, ev) {
 
 let helpCommon = {
     notifier: html`Name of notifiers to use for sending notifications. Can be:
-                  <div class="extable"><div>Single notifier or name of entity with list</div>
-                                              <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
-                         <div>List of notifiers:</div><div><code>[ telegram1, telegram2 ]</code></div>
-                      <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                  <div class="extable">
+                       <div>Single notifier or name of entity with list:</div>
+                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
+                       <div>List of notifiers (YAML):</div><div><pre>- telegram1\n- telegram2</code></pre></div>
+                       <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
                   </div>`,
     summary_notifier: html`Name of notifiers to use for sending summary notifications. Can be:
-                  <div class="extable"><div>Single notifier or name of entity with list</div>
-                                              <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
-                         <div>List of notifiers:</div><div><code>[ telegram1, telegram2 ]</code></div>
+                  <div class="extable">
+                       <div>Single notifier or name of entity with list</div>
+                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code><div class="bigor">or</div><code>sensor.my_notifier_list</code></div>
+                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
+                       <div>List of notifiers (YAML):</div><div><pre>- telegram1\n- telegram2</code></pre></div>
                       <div>Template producing list of notifiers:</div><div><code>{{ [ "tel1", "tel2" ] }}</code></div>
                   </div>`,
+    annotate_messages: html`If true, add extra context information to notifications, like number of times alert has fired since last notification. Can be:
+                  <div class="extable">
+                         <div>Truthy value (true/yes/on/1 or opposites)</div><div><code>true</code></div>
+                  </div>`,
+    reminder_frequency_mins: html`Interval in minutes between reminders that a condition alert continues to fire. Can be:
+                  <div class="extable">
+                          <div>Single float (>= 0.01)</div><div><code>10</code></div>
+                         <div>List of floats:</div><div><code>[ 10, 15 ]</code></div>
+                  </div>`,
+    throttle_fires_per_mins: html`Limit notifications of alert firings based on a list of two numbers [X, Y]. If the alert has fired and notified more than X times in the last Y minutes, then throttling turns on and no further notifications occur until the rate drops below the threshold. Can be:
+                  <div class="extable"><div>List of [int, float]</div>
+                                              <div><code>[3, 5.2]</code></div>
+                  </div>`,
+    domain: html`Alert entity name is alert2.[domain]_[name]. Can be:
+                  <div class="extable">
+                       <div>Letters, numbers, underscore</div><div><code>test</code><div class="bigor">or</div><code>boiler</code></div>
+                  </div>`,
+    name: html`Alert entity name is alert2.[domain]_[name]. Can be:
+                  <div class="extable">
+                       <div>Letters, numbers, underscore</div><div><code>test</code><div class="bigor">or</div><code>boiler</code></div>
+                  </div>`,
+    friendly_name: html`Name to display instead of the entity name. Can be:
+                  <div class="extable">
+                       <div>Simple string</div><div><code>my test alert</code></div>
+                       <div>Template (eg using generator variables)</div><div><code>battery {{genElem}}</code></div>
+                  </div>`,
+    condition: html`If specified, must be truthy for alert to fire. Can be:
+                  <div class="extable">
+                       <div>Truthy value (true/yes/on/1 or opposites)</div><div><code>on</code></div>
+                       <div>Entity name containing truthy value</div><div><code>binary_sensor.trouble</code></div>
+                       <div>Template evaluating to truthy</div><div><code>{{ states('sensor.foo')|float > 3 }}</code></div>
+                  </div>`,
+    trigger: html`Alert first the moment the trigger triggers if any condition specified is also true. Can be:
+                  <div class="extable">
+                       <div>A YAML <a href="https://www.home-assistant.io/docs/automation/trigger/">trigger</a> spec written using YAML flow notation.</div><div><code>[{'platform':'state','entity_id':'sensor.zz'}]</code></div>
+                       <div></div><div><code>[{'trigger':'template','value_template':'{{ true }}'}]</code></div>
+                  </div>`,
+    value: html`A float or template or entity name evaluating to a float. Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>3.5</code></div>
+                       <div>Entity name</div><div><code>sensor.room_temperature</code></div>
+                       <div>Float</div><div><code>3.5</code></div>
+                       <div>Template</div><div><code>{{ states('sensor.foo') }}/code></div>
+                  </div>`,
+    hysteresis: html`Compare <code>value</code> to limits using hysteresis. threshold is considered exceeded if value exceeds min/max, but does not reset until value increases past min+hysteresis or decreases past max-hysteresis. . Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>4.2</code></div>
+                  </div>`,
+    maximum: html`Maximum acceptable value for value. Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>30</code></div>
+                  </div>`,
+    minimum: html`Minimum acceptable value for value. Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>-2</code></div>
+                  </div>`,
+    delay_on_secs: html`Number of seconds that any condition must be true and any threshold specified must be exceeded before the alert starts firing. Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>5</code></div>
+                  </div>`,
+    early_start: html`By default, alert monitoring starts only once HA has fully started (i.e., after the HOMEASSISTANT_STARTED event). If early_start is true for an alert, then monitoring of that alert starts earlier, as soon as the alert2 component loads. Can be:
+                  <div class="extable">
+                       <div>Truthy boolean (eg true/yes/on or opposites)</div><div><code>false</code></div>
+                  </div>`,
+    generator: html`A <a href="https://github.com/redstone99/hass-alert2#generator-patterns">generator pattern</a> for declaring mulitple alerts. Can be:
+                  <div class="extable">
+                       <div>Single string</div><div><code>battery1</code></div>
+                       <div>List of strings</div><div><code>[ battery1, battery2 ]</code></div>
+                       <div>List of entity names</div><div><code>[ sensor.battery1, sensor.battery2 ]</code></div>
+                       <div>Entity name with list of strings</div><div><code>sensor.my_list</code></div>
+                       <div>Template producing list of strings</div><div><code>{{ [ "a", "b" ] }}</code></div>
+                       <div>Template producing list of dicts using entity_regex</div><div><code>{{ sensors|entity_regex('sensor.my_battery(\d+)')|list }}</code></div>
+                  </div>`,
+    generator_name: html`Each generator creates a sensor entity with the name sensor.alert2generator_[generator_name].. Can be:
+                  <div class="extable">
+                       <div>String</div><div><code>all_batteries</code></div>
+                  </div>`,
+    message: html`Text to send with notifications. Can be:
+                  <div class="extable">
+                       <div>String</div><div><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
+                       <div>Template</div><div><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                  </div>`,
+    done_message: html`Message to send when a condition alert turns off. Replaces the default message. Can be:
+                  <div class="extable">
+                       <div>String</div><div><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
+                       <div>Template</div><div><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                  </div>`,
+    title: html`Passed as the <code>title</code> parameter to the notify service call. Can be:
+                  <div class="extable">
+                       <div>String</div><div><code>foo bar</code></div>
+                       <div>Template</div><div><code>{{ states('sensor.foo') }}</code></div>
+                  </div>`,
+    target: html`Passed as the <code>target</code> parameter to the notify service call. Can be:
+                  <div class="extable">
+                       <div></div><div><code></code></div>
+                  </div>`,
+    data: html`Passed as the <code>data</code> parameter to the notify service call. Can be:
+                  <div class="extable">
+                       <div>YAML dictionary</div><div><code>{ val1: 3, val2: foo }</code></div>
+                  </div>`,
+    //: html`. Can be:
+    //              <div class="extable">
+    //                   <div></div><div><code></code></div>
+    //              </div>`,
+    
 };
 
 let topCommon = html``;
@@ -2136,46 +2250,34 @@ class Alert2EditDefaults extends LitElement {
                  .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.annotate_messages}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
                  .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.reminder_frequency_mins}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="throttle_fires_per_mins" type=${FieldTypes.STR}
                  .defaultP=${this._topConfigs.rawYaml.defaults}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.throttle_fires_per_mins}</div></alert2-cfg-field>
 
             <h3>Top-level options</h3>
             <alert2-cfg-field .hass=${this.hass} name="skip_internal_errors" type=${FieldTypes.BOOL}
                  .defaultP=${this._topConfigs.rawYaml}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi}  .currP=${this._topConfigs.rawUi} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.skip_internal_errors}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="notifier_startup_grace_secs" type=${FieldTypes.FLOAT}
                  .defaultP=${this._topConfigs.rawYaml}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi}  .currP=${this._topConfigs.rawUi} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.notifier_startup_grace_secs}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="defer_startup_notifications" type=${FieldTypes.STR}
                  .defaultP=${this._topConfigs.rawYaml}
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi}  .currP=${this._topConfigs.rawUi} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.defer_startup_notifications}</div></alert2-cfg-field>
             
             <div style="margin-top: 0.5em;"><ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button></div>
             ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
@@ -2203,6 +2305,9 @@ class Alert2EditDefaults extends LitElement {
         display: inline-block;
         width: 3.5em;
         text-align: center;
+    }
+    div.extable pre {
+        margin: 0;
     }
       `;
 }
@@ -2401,88 +2506,62 @@ class Alert2Create extends LitElement {
             <alert2-cfg-field .hass=${this.hass} name="domain" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text 33
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.domain}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="name" type=${FieldTypes.STR} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                  .savedP=${{}}  .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.name}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="friendly_name" type=${FieldTypes.TEMPLATE} tabindex="0"
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.friendly_name}</div></alert2-cfg-field>
 
             <h3>Fire control</h3>
             <alert2-cfg-field .hass=${this.hass} name="condition" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.condition}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="trigger" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.trigger}</div></alert2-cfg-field>
             <div><span style="visibility:hidden">*</span>Threshold <div style="margin-left: 1.5em;">
                <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      templateType=${TemplateTypes.SINGLE} .genResult=${this._generatorResult}
                      .savedP=${{}} .currP=${this.alertCfg} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
+                  <div slot="help">${helpCommon.value}</div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="hysteresis" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
+                  <div slot="help">${helpCommon.hysteresis}</div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="maximum" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
+                  <div slot="help">${helpCommon.maximum}</div></alert2-cfg-field>
                <alert2-cfg-field .hass=${this.hass} name="minimum" type=${FieldTypes.STR}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
                      .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-                  <div slot="help">
-                      some help text
-                  </div></alert2-cfg-field>
+                  <div slot="help">${helpCommon.minimum}</div></alert2-cfg-field>
             </div></div>
             <alert2-cfg-field .hass=${this.hass} name="delay_on_secs" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.delay_on_secs}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="early_start" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.early_start}</div></alert2-cfg-field>
 
             <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.message}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="done_message" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.done_message}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="notifier" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   templateType=${TemplateTypes.LIST} .genResult=${this._generatorResult}
@@ -2496,53 +2575,37 @@ class Alert2Create extends LitElement {
             <alert2-cfg-field .hass=${this.hass} name="title" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.title}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="target" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.target}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="data" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.data}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="throttle_fires_per_mins" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.throttle_fires_per_mins}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.reminder_frequency_mins}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="annotate_messages" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.annotate_messages}</div></alert2-cfg-field>
             <h3>Generator</h3>
             <alert2-cfg-field .hass=${this.hass} name="generator" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
                   templateType=${TemplateTypes.LIST} @generator-result=${this._generator_rez}
                   .savedP=${{}} .currP=${this.alertCfg} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.generator}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="generator_name" type=${FieldTypes.STR}
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} >
-               <div slot="help">
-                   some help text
-               </div></alert2-cfg-field>
+               <div slot="help">${helpCommon.generator_name}</div></alert2-cfg-field>
           </div>
           <div class="doutput">
             <h3>Output</h3>
