@@ -2027,7 +2027,7 @@ let helpCommon = {
                   </div>`,
     annotate_messages: html`If true, add extra context information to notifications, like number of times alert has fired since last notification. Can be:
                   <div class="extable">
-                         <div>Truthy value (true/yes/on/1 or opposites)</div><div><code>true</code></div>
+                         <div>Truthy (true/yes/on/1 or opposites)</div><div><code>true</code></div>
                   </div>`,
     reminder_frequency_mins: html`Interval in minutes between reminders that a condition alert continues to fire. Can be:
                   <div class="extable">
@@ -2124,6 +2124,21 @@ let helpCommon = {
     data: html`Passed as the <code>data</code> parameter to the notify service call. Can be:
                   <div class="extable">
                        <div>YAML dictionary</div><div><code>{ val1: 3, val2: foo }</code></div>
+                  </div>`,
+    skip_internal_errors: html`If true, an entity for alert2.error will not be created, you will not receive any notifications for problems with your config file or Alert2 internal errors, and such errors won't show up in the Alert2 UI card. Errors will still appear in the log file. Can be:
+                  <div class="extable">
+                       <div>Truthy (true/on/yes/1 or opposites)</div><div><code>false</code></div>
+                  </div>`,
+    notifier_startup_grace_secs: html`Time to wait after HA starts for a notifier to be defined. Can be:
+                  <div class="extable">
+                       <div>Float</div><div><code>60</code></div>
+                  </div>`,
+    defer_startup_notifications: html`True means no notifications are sent until notifier_startup_grace_secs passes after startup. False means send notifications as soon as the notifier is defined in HA. Or this parameter can be name of a single notifier or list of notifiers for those to defer during startup. Can be:
+                  <div class="extable">
+                       <div>Truthy (yes/on/true/1 or opposites)</div><div><code>true</code></div>
+                       <div>Single notifier:</div>
+                           <div><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code></div>
+                       <div>List of notifiers (YAML flow):</div><div><code>[ telegram1, telegram2 ]</code></div>
                   </div>`,
     //: html`. Can be:
     //              <div class="extable">
@@ -2226,12 +2241,11 @@ class Alert2EditDefaults extends LitElement {
         return html`
          <div class="container" >
             <div style="margin-bottom: 1em;">
-                Set defaults and parameters affecting all alerts
+                Set defaults and parameters affecting all alerts.
                 <ul><li>Values set here override any values set in YAML
-                <li>Typing in any field will promptly be followed by "Render result", showing how Alert2 interpreted the setting.
-                <li><code>notifier_startup_grace_secs</code> and <code>defer_startup_notifications</code> require an HA restart before they come into affect.
-                <li>All other fields immediately affect new alerts. You can go to "Developer tools" -> YAML and click on "Alert2" to reload both YAML and UI Alert2 alerts with the new settings.
-                <li>See <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
+               <li>You can go to "Developer tools" -> YAML and click on "Alert2" to reload both YAML and UI Alert2 alerts with the new settings. <code>notifier_startup_grace_secs</code> and <code>defer_startup_notifications</code> require an HA restart.
+                <li>Click on any field name for brief help and see <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
+
                 </ul>
             </div>
             <h3>Default alert parameters</h3>
@@ -2279,7 +2293,7 @@ class Alert2EditDefaults extends LitElement {
                  .savedP=${this._topConfigs.origRawUi}  .currP=${this._topConfigs.rawUi} >
                <div slot="help">${helpCommon.defer_startup_notifications}</div></alert2-cfg-field>
             
-            <div style="margin-top: 0.5em;"><ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button></div>
+            <div style="margin-top: 0.5em 0 2em 2em; margin-left: 2em;"><ha-progress-button .progress=${this._saveInProgress} @click=${this._save}>Save</ha-progress-button></div>
             ${this._serverErr ? html`<ha-alert alert-type=${"error"}>${this._serverErr}</ha-alert>` : ""}
          </div>`;
     }
