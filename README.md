@@ -7,9 +7,10 @@
 
 # Alert2 UI
 
-This repository contains a Lovelace card to display and interact with [Alert2](https://github.com/redstone99/hass-alert2) alerts.  It also enhances the information shown in the "more-info" dialog when viewing Alert2 entities in entity cards. We recommend first installing [Alert2](https://github.com/redstone99/hass-alert2).
+This repository contains two Lovelace cards to display and interact with [Alert2](https://github.com/redstone99/hass-alert2) alerts.  It also enhances the information shown in the "more-info" dialog when viewing Alert2 entities in entity cards. We recommend first installing [Alert2](https://github.com/redstone99/hass-alert2).
 
 ![Alert2 overview card](resources/overview.png)
+![Alert2 manager card](resources/manager.png)
 
 ## Install
 
@@ -101,7 +102,7 @@ The install process above downloaded a js module, `alert2.js`.
     Lastly, if you installed Alert2 UI manually and configure dashboards via the UI, then enable "Advanced mode" in your user profile, then click on Settings -> Dashboards -> Resources.  "Resources" may appear only in the triple vertical dots on the upper right of the dashboards page. Click on "Add Resource" to add `alert2.js`.
 
 
-1. `alert2.js` defines a custom UI card called `custom:alert2-overview`. If you configure dashboards via the UI, start editing a dashboard, then click on "Add Card" (or the "+" icon), then manually add a card of type `custom:alert2-overview`.
+1. `alert2.js` defines two custom UI cards called `custom:alert2-overview` and `custom:alert2-manager`. If you configure dashboards via the UI, start editing a dashboard, then click on "Add Card" (or the "+" icon), then manually add a card of type `custom:alert2-overview`.
 
     If you're using yaml to specify a dashboard, you can add the Alert2 overview card to your dashboard by adding it to the list of cards in a view, like (in bold):
 
@@ -110,13 +111,14 @@ The install process above downloaded a js module, `alert2.js`.
       name: Example
       cards:
       <b>- type: "custom:alert2-overview"</b>
+      <b>- type: "custom:alert2-manager"</b>
       - type: entities
         ...</pre>
 
 
 1. Restart HomeAssistant and reload the UI
 
-## Usage
+## Overview card
 
 The `alert2-overview` Lovelace card lists recently active Alert2 alerts, as well as snoozed or disabled alerts.  A slider at the top of the card controls the time window covered. Each line shows the status of the alert, including when it last fired, how many times it fired since the last notification, and whether it has been ack'ed, snoozed or disabled.  Each alert will show an "ACK" button if it hasn't been acked already. The button "ACK ALL" will ack all alerts, not just the ones displayed.
 
@@ -154,4 +156,13 @@ Times are displayed in the browser local time zone.
 You may also add alert2 entities to entities cards and other cards that support entities.  If you click on an alert shown in such a situation, you'll see a popup (called a "more-info dialog") similar to the one shown above.  However, since Alert2 isn't integrated into the core HomeAssistant, that dialog will include some extra default sections like "history", but will also include the sections described above.
 
 Finally, you can also view alert information by going to Settings -> Devices & Services -> Entities, typing "alert2." in the search box and browsing the list.  Clicking on one will popup the "more-info dialog".
+
+## Manager card
+
+The `alert2-manager` Lovelace card allows you to adjust default settings, create/edit/delete alerts, and search over alerts created via the card.
+
+![Alert2 manager card](resources/manager.png)
+
+Any defaults adjusted via the UI override any defaults specified in your YAML config. The defaults apply to alerts created either via the UI or in your YAML config.
+
 
