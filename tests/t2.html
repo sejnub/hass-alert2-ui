@@ -97,12 +97,14 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
-                 jassert(await startTest(doTest1));
-                 jassert(await startTest(doTest2));
-                 jassert(await startTest(doTest3));
+             if (0) {
                  jassert(await startTest(doTest4));
+                 return;
              }
+             jassert(await startTest(doTest1));
+             jassert(await startTest(doTest2));
+             jassert(await startTest(doTest3));
+             jassert(await startTest(doTest4));
              jassert(await startTest(doTest5));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
@@ -201,13 +203,15 @@
                  callApi: callApi,
              };
              let ao = document.createElement(eName);
-             console.log('ao is ', ao, eName);
+             //console.log('ao is ', ao, eName);
              ao.hass = newHass;
              if (extraParams) {
                  Object.assign(ao, extraParams);
              }
              if (eName == 'alert2-create') {
-                 ao.didSomethingCb = ()=>{console.log('alert2-create didSomethingCb'); };
+                 ao.didSomethingCb = ()=>{
+                     //console.log('alert2-create didSomethingCb');
+                 };
              }
              testDiv.appendChild(ao);
              let z = {ao: ao};
@@ -218,7 +222,7 @@
                      //if (ao.innerHTML) { break; }
                      let tt = ao.shadowRoot.querySelector(`alert2-cfg-field[name="notifier"]`);
                      if (tt) { break; }
-                     console.log('no ao :(...', !!tt);
+                     //console.log('no ao :(...', !!tt);
                      jassert(c < 50);
                      c++;
                  }
@@ -335,7 +339,7 @@
                          jFireEvent(jj, 'value-changed', { value: val });
                      }
                  }
-                 await sleepMs(2);
+                 await sleepMs(5);
                  let hasSub = ['value','hysteresis','maximum','minimum'].includes(aname);
                  
                  console.log(`setting ${aname} to "${val}" and data=${cf.currP[aname]}`);
@@ -459,6 +463,7 @@
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: { 'annotate_messages': 'off' } }});
              await z.setField('annotate_messages', '');
+             await sleepMs(10);
              await z.checkRender('annotate_messages', /^\s+$/);
 
              // reminder_frequency_mins
@@ -858,7 +863,6 @@
              // Now let's reopen the create dialog as if editing existing alert
              z.ao.remove();
              z = await initTest('alert2-create', {entInfo: { domain: 'd1', name: 'n2' }});
-             console.log('opened existing dialog..............');
              await sleepMs(50); // extra sleep needed for some reason ;(
              await z.checkField('domain', 'd1');
              await z.checkRender('domain', 'result:"d1"');
@@ -907,7 +911,6 @@
                  while (true) {
                      await sleepMs(10);
                      let s = z.ao.getSearchStatus();
-                     console.log('fuck', s.rez);
                      if (s.inProgress === false) {
                          await sleepMs(3);
                          return s.rez;
@@ -933,33 +936,49 @@
                           {config:{ defaults: {}, alerts: [
                               { domain: 'd1', name: 'n1', condition: 'off' }
                           ]}})
+             await z.setField('name', 'n3');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
              await z.setField('name', 'n2');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             await z.setField('domain', 'd0');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(null);
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {}, alerts: [
                               { domain: 'd1', name: 'n1', condition: 'off' },
-                              { domain: 'd1', name: 'n2', condition: 'off' }
+                              { domain: 'd1', name: 'n3', condition: 'off' },
+                              { domain: 'd1', name: 'n2', condition: 'off' },
+                              { domain: 'd0', name: 'n2', condition: 'off' }
                           ]}})
-             await z.setField('name', 'n3');
-             await z.setField('generator', 'n3');
+             await z.setField('name', 'n5');
+             await z.setField('generator', 'n4');
              await z.setField('generator_name', 'g1');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(null);
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: {}, alerts: [
                               { domain: 'd1', name: 'n1', condition: 'off' },
+                              { domain: 'd1', name: 'n3', condition: 'off' },
                               { domain: 'd1', name: 'n2', condition: 'off' },
-                              { domain: 'd1', name: 'n3', condition: 'off', generator_name:'g1',generator:'n3' }
+                              { domain: 'd0', name: 'n2', condition: 'off' },
+                              { domain: 'd0', name: 'n5', condition: 'off', generator_name:'g1',generator:'n4' }
                           ]}})
              z.ao.remove();
 
              z = await initTest('alert2-manager');
              await sleepMs(100);
-             jasserteq((await waitSearch()).results.length, 3);
-             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
-             jasserteq(rs.length, 3);
-
+             let srez = (await waitSearch()).results;
+             jasserteq(srez.length, 5);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div.anent');
+             jasserteq(rs.length, 5);
+             jasserteq(rs[0].textContent, 'sensor.alert2generator_g1');
+             jasserteq(rs[1].textContent, 'alert2.d0_n2');
+             jasserteq(rs[2].textContent, 'alert2.d1_n1');
+             jasserteq(rs[3].textContent, 'alert2.d1_n2');
+             jasserteq(rs[4].textContent, 'alert2.d1_n3');
+             
              // Type a search term
              let txtf = z.ao.shadowRoot.querySelector('ha-textfield');
              jassert(txtf);
@@ -967,29 +986,29 @@
              //txtf.value = 'z';
              await sleepMs(100);
              jasserteq((await waitSearch()).results.length, 0);
-             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div.anent');
              jasserteq(rs.length, 0);
 
              jFireEvent(txtf, 'input', { value: 'n' });
              await sleepMs(100);
-             jasserteq((await waitSearch()).results.length, 3);
-             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
-             jasserteq(rs.length, 3);
+             jasserteq((await waitSearch()).results.length, 5);
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div.anent');
+             jasserteq(rs.length, 5);
 
              jFireEvent(txtf, 'input', { value: 'n1' });
              await sleepMs(100);
              jasserteq((await waitSearch()).results.length, 1);
-             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div.anent');
              jasserteq(rs.length, 1);
              jassertObjeq(z.ao.getSearchStatus().rez, { results: [ { id: 'alert2.d1_n1', domain: 'd1', name: 'n1' }]});
              
              jFireEvent(txtf, 'input', { value: 'g1' });
              await sleepMs(100);
              jasserteq((await waitSearch()).results.length, 1);
-             rs = z.ao.shadowRoot.querySelectorAll('div.results > div');
+             rs = z.ao.shadowRoot.querySelectorAll('div.results > div.anent');
              jasserteq(rs.length, 1);
-             console.log(z.ao.getSearchStatus().rez);
              jassertObjeq(z.ao.getSearchStatus().rez, { results: [ { id: 'sensor.alert2generator_g1', domain: 'alert2generator', name: 'g1' }]});
+             z.ao.remove();
          }
 
          async function doTest5() {

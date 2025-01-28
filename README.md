@@ -159,10 +159,20 @@ Finally, you can also view alert information by going to Settings -> Devices & S
 
 ## Manager card
 
-The `alert2-manager` Lovelace card allows you to adjust default settings, create/edit/delete alerts, and search over alerts created via the card.
+The `alert2-manager` Lovelace card allows you to adjust default settings, create/edit/delete alerts, and search over alerts created via the UI.  The search box lets you filter UI-created alerts by the text you type. Clicking on any result will bring up a dialog that lets you edit the alert.
 
-![Alert2 manager card](resources/manager.png)
+<img src="resources/search.png" width="500"/>
 
-Any defaults adjusted via the UI override any defaults specified in your YAML config. The defaults apply to alerts created either via the UI or in your YAML config.
+Any defaults adjusted via the UI override any defaults specified in your YAML config. The defaults apply to alerts created either via the UI or in your YAML config.  After adjusting defaults, you can reload the alert config to have the new defaults apply to all alerts, whether defined in YAML or via the UI.  You can reload the config by going to "Developer Tool" -> "YAML" and clicking on "Alert2".
 
+### Editing config fields
 
+When editing a config field for defaults or an alert, a line will appear with "Render result", showing how Alert2 interprets what you've written.
+
+![Editing config fields](resources/edit-field.png)
+
+You can also click on the config field name to show some help info, including examples of what you can enter:
+
+![Editing config help](resources/edit-help.png)
+
+Most fields are interpreted as YAML, with the exception that if you enter template characters (e.g., "{{" ), then the input is automatically quoted, to simplify typing.

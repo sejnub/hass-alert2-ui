@@ -1516,6 +1516,7 @@ class Alert2Manager extends LitElement {
                                 rez: null };
             return;
         }
+        retv.results.sort((a,b)=>{ return a.domain == b.domain ? (a.name > b.name ? 1 : -1) : (a.domain > b.domain ? 1 : -1) });
         this._searchStatus = { inProgress: false, error: null, rez: retv };
     }
     _change(ev) {
@@ -1544,8 +1545,15 @@ class Alert2Manager extends LitElement {
         let resultHtml = '';
         if (this._searchStatus.rez) {
             if (this._searchStatus.rez.results.length > 0) {
-                let rezlist = this._searchStatus.rez.results.map((el)=> html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
-                resultHtml = html`<div class="results">${rezlist}</div>`;
+                let alist = [];
+                for (let idx = 0 ; idx < this._searchStatus.rez.results.length ; idx++) {
+                    let el = this._searchStatus.rez.results[idx];
+                    if (idx == 0 || el.domain != this._searchStatus.rez.results[idx-1].domain) {
+                        alist.push(html`<div class="domainheader">${el.domain}</div>`);
+                    }
+                    alist.push(html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+                }
+                resultHtml = html`<div class="results">${alist}</div>`;
             } else {
                 resultHtml = html`<div>No results</div>`;
             }
@@ -1618,6 +1626,11 @@ class Alert2Manager extends LitElement {
       .anent:hover {
           background-color: var(--secondary-background-color);
       }
+      .domainheader {
+         font-size: 0.9em;
+         font-weight: bold;
+         margin-bottom: -0.7em;
+      }
     `;
 };
 
@@ -1642,17 +1655,6 @@ const debounce = (callback, wait) => {
 }
 function displayStr(tval) {
     return JSON.stringify(tval);
-    if (Array.isArray(tval)) {
-        if (tval.length == 0) { return '[]' }
-        if (tval.length == 1) { return tval[0] }
-        if (typeof(tval[0]) == 'string') {
-            let n = tval.map((v)=> `"${v}"`);
-            return '[ ' + n.join(',') + ' ]';
-        } else {
-            return '[ ' + tval.join(',') + ' ]';
-        }
-    }
-    return tval;
 }
 
 let TopTypes = makeEnum({ COND:  'cond', EVENT:  "event", GENERATOR: "generator" });
@@ -1705,7 +1707,7 @@ class Alert2CfgField extends LitElement {
     }
     async doRenderTemplate() {
         let value = uToE(this.getValue());
-        console.log('doRenderTemplate', this.name, value);
+        //console.log('doRenderTemplate', this.name, value);
         if (!value) {
             this.renderInfo = { rendering: false, error: null, result: null };
             if (this.name == 'generator') {
@@ -1727,13 +1729,13 @@ class Alert2CfgField extends LitElement {
                                 result: null };
             return;
         }
-        console.log('doRenderTemplate RESPONSE ', this.name, retv);
+        //console.log('doRenderTemplate RESPONSE ', this.name, retv);
         let resp = { rendering: false, error: null, result: null };
         if (Object.hasOwn(retv, 'error')) {
             resp.error = retv.error;
         }
         if (Object.hasOwn(retv, 'rez')) {
-            console.log(this.name, ' got render result ', retv.rez);
+            //console.log(this.name, ' got render result ', retv.rez);
             resp.result = retv.rez;
         }
         if (!Object.hasOwn(retv, 'error') && !Object.hasOwn(retv, 'rez')) {
@@ -1745,7 +1747,7 @@ class Alert2CfgField extends LitElement {
                 jFireEvent(this, "generator-result", { generatorResult: resp.result });
             }
         }
-        console.log('doRenderTemplate FINALY ', this.name, this.renderInfo);
+        //console.log('doRenderTemplate FINALY ', this.name, this.renderInfo);
     }
     setConfig(config) {
         this._cardConfig = config;
@@ -1771,7 +1773,7 @@ class Alert2CfgField extends LitElement {
     _change(ev) {
         //this.showRendered = true;
         let value = ev.detail?.value || ev.target.value;
-        console.log(`_change happend to ${this.name} with value=${value}`);
+        //console.log(`_change happend to ${this.name} with value=${value}`);
         let parentP = this.currP;
         if (this.namePrefix) {
             parentP = parentP[this.namePrefix];
@@ -1915,7 +1917,7 @@ class Alert2CfgField extends LitElement {
                 console.error('wrong type for field', this.name, this.type);
             }
             if (!lenStr && Array.isArray(this.renderInfo.result)) {
-                console.log('got array result', this.renderInfo.result);
+                //console.log('got array result', this.renderInfo.result);
                 lenStr = html` (len=${this.renderInfo.result.length})`;
             }
             renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;" class="renderResult">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
@@ -1992,8 +1994,8 @@ class Alert2CfgField extends LitElement {
 }
 
 function uToE(val) { return (val == undefined) ? '' : (val); }
+// unused
 function closeOtherExpanded(elem, ev) {
-    return;
     // Unexpand other fields when one expands.
     let expanded = ev.detail?.expanded;
     let targetEl = ev.target;
@@ -2203,7 +2205,7 @@ class Alert2EditDefaults extends LitElement {
     //    return true;
     //}
     async refresh() {
-        console.log('doing refresh');
+        //console.log('doing refresh');
         let retv;
         try {
             this._topConfigs = await this.hass.callApi('POST', 'alert2/loadTopConfig', {});
@@ -2213,7 +2215,7 @@ class Alert2EditDefaults extends LitElement {
             console.error('alert2/loadTopConfig: http err', err);
             return;
         }
-        console.log('got topConfig', this._topConfigs);
+        console.log('editDefaults::refresh() got topConfig', this._topConfigs);
     }
     changed(ev, fieldSet) {
         let value = ev.detail?.value || ev.target.value;
@@ -2253,7 +2255,7 @@ class Alert2EditDefaults extends LitElement {
     }
     // Unexpand other fields when one expands.
     expandClick(ev) {
-        closeOtherExpanded(this, ev);
+        //closeOtherExpanded(this, ev);
     }
     render() {
         if (!this.hass) { return "waiting for hass"; }
@@ -2403,7 +2405,7 @@ class Alert2Create extends LitElement {
         }
     }
     expandClick(ev) {
-        closeOtherExpanded(this, ev);
+        //closeOtherExpanded(this, ev);
     }
     async _validate(ev) { await this.doOp('validate', ev); }
     async _create(ev) { await this.doOp('create', ev); }
@@ -2417,7 +2419,7 @@ class Alert2Create extends LitElement {
         }
         this._opInProgress = { op: opName, inProgress: true };
         let rez;
-        console.log(opName, 'of', this.alertCfg);
+        //console.log(opName, 'of', this.alertCfg);
         try {
             let obj = {};
             obj[opName] = this.alertCfg;
@@ -2434,7 +2436,7 @@ class Alert2Create extends LitElement {
             this.requestUpdate();
             return;
         }
-        console.log(opName, ' OP OK? ', rez);
+        //console.log(opName, ' OP OK? ', rez);
         this._opInProgress.inProgress = false;
         if (rez.error) {
             abutton.actionError();
@@ -2455,7 +2457,7 @@ class Alert2Create extends LitElement {
     }
     _generator_rez(ev) {
         this._generatorResult = ev.detail?.generatorResult;
-        console.log('_generator_rez', ev.detail, this._generatorResult);
+        //console.log('_generator_rez', ev.detail, this._generatorResult);
     }
     configToYaml() {
         let yaml = 'alert2:';
@@ -2670,6 +2672,7 @@ class Alert2Create extends LitElement {
         background-color: var(--secondary-background-color);
         padding: 8px;
         whitespace: pre-wrap;
+        margin-top: 0.2em;
      }
      ${extableCss}
       `;
