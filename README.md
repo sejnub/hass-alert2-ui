@@ -165,6 +165,8 @@ The `alert2-manager` Lovelace card allows you to adjust default settings, create
 
 Any defaults adjusted via the UI override any defaults specified in your YAML config. The defaults apply to alerts created either via the UI or in your YAML config.  After adjusting defaults, you can reload the alert config to have the new defaults apply to all alerts, whether defined in YAML or via the UI.  You can reload the config by going to "Developer Tool" -> "YAML" and clicking on "Alert2".
 
+Alert2 does not allow any two alerts created via the UI or YAML to have the same domain and name.
+
 ### Editing config fields
 
 When editing a config field for defaults or an alert, a line will appear with "Render result", showing how Alert2 interprets what you've written.
