@@ -2,7 +2,7 @@
 <html lang="en">
     <!-- 
          Run server with (from the Alert2 repo):
-             venv/bin/pytest tests/test_server.py
+             JTEST_JS_DIR=/home/redstone/home-monitoring/homeassistant/www  venv/bin/pytest tests/test_server.py
          View page at:
              http://localhost:50005/jtest/tests/t2.html
          
@@ -97,8 +97,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
-                 jassert(await startTest(doTest4));
+             if (1) {
+                 jassert(await startTest(doTest6));
                  return;
              }
              jassert(await startTest(doTest1));
@@ -106,6 +106,7 @@
              jassert(await startTest(doTest3));
              jassert(await startTest(doTest4));
              jassert(await startTest(doTest5));
+             jassert(await startTest(doTest6));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -198,10 +199,28 @@
              return data;
          }
          async function initTest(eName, extraParams) {
+             let ws = new WebSocket('http://localhost:50005/api/websocket');
+             ws.addEventListener('close', function(ev) {             console.log('ws got close');           });
+             ws.addEventListener('message', function(ev) {
+                 let msg = ev.data;
+                 console.log('ws got message', msg);
+                 
+             });
+             
+             let msgId = 1;
+             let connection = {
+                 subscribeMessage = function (cb, mdata) {
+                     ws.send({ type: 'subscribe_events', event_type: 'alert2_watch_display_msg', id: msgId });
+                 }
+             };
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
                  callApi: callApi,
              };
+
+             
+             ws.close();
+             
              let ao = document.createElement(eName);
              //console.log('ao is ', ao, eName);
              ao.hass = newHass;
@@ -463,7 +482,7 @@
              jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
                           {config:{ defaults: { 'annotate_messages': 'off' } }});
              await z.setField('annotate_messages', '');
-             await sleepMs(10);
+             await sleepMs(50);
              await z.checkRender('annotate_messages', /^\s+$/);
 
              // reminder_frequency_mins
@@ -687,6 +706,14 @@
              await z.setField('title', '');
              await z.checkField('title', null);
 
+             // display_msg
+             await z.setField('display_msg', 'yay');
+             await z.checkRender('display_msg', /result:"yay"/);
+             await z.setField('display_msg', '{{"a"+"b"}}');
+             await z.checkRender('display_msg', /result:"ab"/);
+             await z.setField('display_msg', '');
+             await z.checkField('display_msg', null);
+
              // target
              await z.setField('target', 'yay');
              await z.checkRender('target', /result:"yay"/);
@@ -767,7 +794,7 @@
              // So does validate
              await z.setField('name', 'n1');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.validateB'));
-             z.checkErr(/must contain at least one of/);
+             z.checkErr(/Must specify either/);
              
              // Complete fields, validate succeeds
              await z.setField('condition', 'off');
@@ -1061,6 +1088,7 @@
              z.checkDefault('notifier', /empty: "happy"/);
              z.checkDefault('summary_notifier', /empty: false/);
              z.checkDefault('title', null);
+             z.checkDefault('display_msg', null);
              z.checkDefault('target', null);
              z.checkDefault('data', null);
              
@@ -1070,6 +1098,15 @@
              z.checkDefault('generator', null);
              z.checkDefault('generator_name', null);
              z.ao.remove();
+         }
+         async function doTest6() {
+             z = await initTest('alert2-overview');
+             z.hass = {
+                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } },
+                           'alert2.dd_nn': { state: 'on', attributes: { last_on_time } }
+                 },
+                 callApi: callApi,
+             };
          }
         </script>
     </head>

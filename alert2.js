@@ -483,14 +483,21 @@ class Alert2Overview extends LitElement {
 class Alert2EntityRow extends LitElement  {
     static properties = {
         _config: {state: true},
+        display_msg: { state: true},
     }
     set hass(nh) {
-        this._hass = nh;
-        if (this.shadowRoot && this._hass && this._config) {
-            this.shadowRoot.querySelectorAll("ha-alert2-state").forEach((element) => {
-                const stateObj = this._hass.states[this._config.entity];
-                element.stateObj = stateObj;
-            });
+        if (nh && this._config) {
+            const newStateObj = nh.states[this._config.entity];
+            this._hass = nh;
+            if (this.shadowRoot) {
+                this.shadowRoot.querySelectorAll("ha-alert2-state").forEach((element) => {
+                    element.stateObj = newStateObj;
+                });
+            }
+            //if (newStateObj !== this._stateObj) {
+             //   this._stateObj = newStateObj;
+                //this.checkDisplayMsg();
+            //}
         }
     }
     constructor() {
@@ -498,6 +505,9 @@ class Alert2EntityRow extends LitElement  {
         this._hass = null;
         this._config = null;
         this._stateEl = null;
+        this.display_msg = null;
+        //this._stateObj = null;
+        this._unsubFuncPromise = null;
     }
     setConfig(config) {
         if (!config || !config.entity) {
@@ -505,6 +515,33 @@ class Alert2EntityRow extends LitElement  {
         }
         this._config = config;
     }
+    connectedCallback() {
+        super.connectedCallback();
+        this.checkDisplayMsg();
+    }
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._unsubFuncPromise) {
+            let puf = this._unsubFuncPromise;
+            this._unsubFuncPromise = null;
+            puf.then(unsubFunc => unsubFunc());
+        }
+    }
+    checkDisplayMsg() {
+        if (!this._unsubFuncPromise) {
+            this._unsubFuncPromise = this.hass.connection.subscribeMessage(
+                (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
+                    type: 'alert2_watch_display_msg',
+                    domain: 'dfoo',
+                    name: 'nfoo'
+                });
+        }
+    }
+    updateDisplayMsg(ev) {
+        console.log('updateDisplayMsg to ', ev.rendered);
+        this.display_msg = ev.rendered;
+    }
+    
     _rowClick(ev) {
         console.log('_rowClick', ev);
         return true;
@@ -532,20 +569,27 @@ class Alert2EntityRow extends LitElement  {
         const entHtml = nameToUse.split('_').map((x,idx,arr)=>(idx < arr.length-1)? html`${x}_<wbr/>` : html`${x}`);
         
         // This is essentially the guts of hui-generic-entity-row, except it does not swallow click events, like hui-generic-entity-row does (and converts it to ll-custom).  That means we can react to a click on a 'Ack' button in a row entity.
-//       <div class="awrapper">
-  //    </div>
+        //       <div class="awrapper">
+        //    </div>
+        let dispMsgHtml = ``;
+        if (this.display_msg) {
+            dispMsgHtml = html`<div class="dispMsg">${this.display_msg}</div>`;
+        }
         return html`
-         <div class="outhead">
-            <state-badge class="pointer" .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
-            <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
+        <div class="mainrow">
+            <div class="outhead">
+               <state-badge class="pointer" .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
+               <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
+            </div>
+            <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj} class="text-content value pointer astate"  @click=${this._rowClick} >
          </div>
-         <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj} class="text-content value pointer astate"  @click=${this._rowClick} >
+         ${dispMsgHtml}
          </ha-alert2-state>
 `;
     }
 
     static styles = css`
-      :host {
+      div.mainrow {
         display: flex;
         flex-flow: row wrap;
         align-items: center;
@@ -592,6 +636,10 @@ class Alert2EntityRow extends LitElement  {
       }
       .pointer {
         cursor: pointer;
+      }
+      div.dispMsg {
+         font-size: 0.9em;
+         border: 1px solid green;
       }
     `;
 }
@@ -2039,6 +2087,7 @@ let helpCommon = {
     throttle_fires_per_mins: html`Limit notifications of alert firings based on a list of two numbers [X, Y]. If the alert has fired and notified more than X times in the last Y minutes, then throttling turns on and no further notifications occur until the rate drops below the threshold. Can be:
                   <div class="extable">
                           <div>List of [int, float]</div><div class="exval"><code>[3, 5.2]</code></div>
+                          <div>Null to disable throttling</div><div class="exval"><code>null</code></div>
                   </div>`,
     domain: html`Alert entity name is alert2.[domain]_[name]. Can be:
                   <div class="extable">
@@ -2108,6 +2157,11 @@ let helpCommon = {
                        <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
                   </div>`,
     done_message: html`Message to send when a condition alert turns off. Replaces the default message. Can be:
+                  <div class="extable">
+                       <div>String</div><div class="exval"><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
+                       <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                  </div>`,
+    display_msg: html`Text to display in Alert2 Overview UI card when alert is displayed there. HTML is accepted. Can be:
                   <div class="extable">
                        <div>String</div><div class="exval"><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
                        <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
@@ -2476,7 +2530,7 @@ class Alert2Create extends LitElement {
                 let val;
                 if (['domain','name', 'friendly_name', 'condition', 'message', 'title', 'target',
                      'annotate_messages', 'early_start', 'generator_name',
-                     'done_message', 'delay_on_secs'].includes(fname)) {
+                     'done_message', 'display_msg', 'delay_on_secs'].includes(fname)) {
                     val = yamlEscape(rawVal);
                 } else if (['trigger', 'data', 'throttle_fires_per_mins', 'reminder_frequency_mins',
                             ].includes(fname)) {
@@ -2520,7 +2574,7 @@ class Alert2Create extends LitElement {
          <div class="ifields">
             <div style="margin-bottom: 1em;">
                 Create a new UI alert or edit an existing UI alert.
-                <li>This page can only modify alerts created via the UI. It will not affect any alerts in YAML.
+                <li>This page can only modify alerts created via the UI. It will not affect any alerts in YAML. Alert2 does not allow any two alerts created via the UI or YAML to have the same domain and name.
                 <li>If using a generator, the "Render result" line for all fields will update based on the first element produced by the generator.
                 <li>See <a href="https://github.com/redstone99/hass-alert2">https://github.com/redstone99/hass-alert2</a> for more complete documentation on each field.
                 <li>Fields are generally interpreted as YAML, with some logic to add quotes if writing a template.
@@ -2620,6 +2674,13 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.annotate_messages}</div></alert2-cfg-field>
+
+            <alert2-cfg-field .hass=${this.hass} name="display_msg" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.display_msg}</div></alert2-cfg-field>
+
+
             <h3>Generator</h3>
             <alert2-cfg-field .hass=${this.hass} name="generator" type=${FieldTypes.TEMPLATE}
                  @expand-click=${this.expandClick} @change=${this._change}
