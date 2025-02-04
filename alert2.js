@@ -337,7 +337,6 @@ class Alert2Overview extends LitElement {
             console.log('  skipping jrefresh cuz no hass');
             return false;
         }
-        
         if (forceBigRefresh) {
             // doing periodic check for aged out entities, gotta take slow path
         } else {
@@ -529,7 +528,7 @@ class Alert2EntityRow extends LitElement  {
     }
     checkDisplayMsg() {
         if (!this._unsubFuncPromise) {
-            this._unsubFuncPromise = this.hass.connection.subscribeMessage(
+            this._unsubFuncPromise = this._hass.connection.subscribeMessage(
                 (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
                     type: 'alert2_watch_display_msg',
                     domain: 'dfoo',

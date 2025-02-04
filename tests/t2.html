@@ -199,27 +199,53 @@
              return data;
          }
          async function initTest(eName, extraParams) {
+             let cbMap = {};
              let ws = new WebSocket('http://localhost:50005/api/websocket');
-             ws.addEventListener('close', function(ev) {             console.log('ws got close');           });
-             ws.addEventListener('message', function(ev) {
-                 let msg = ev.data;
-                 console.log('ws got message', msg);
-                 
+             ws.addEventListener('close', function(ev) {             console.log('ws got close', ev); });
+             ws.addEventListener('error', function(ev) {             console.log('ws got error', ev); });
+             let done = new Promise( (resolve) => {
+                 const handle_msg = function(ev) {
+                     const msg = JSON.parse(ev.data);
+                     console.log('ws got message', msg);
+                     if (msg.type == 'auth_ok') {
+                         ws.removeEventListener('message', handle_msg);
+                         resolve();
+                     }
+                 };
+                 ws.addEventListener('message', handle_msg);
+                 ws.addEventListener('open', function(ev) {
+                     console.log('ws got open', ev);
+                     ws.send(JSON.stringify({ type: 'auth', access_token: 'foobar'}));
+                 });
              });
-             
+             await done;
              let msgId = 1;
              let connection = {
-                 subscribeMessage = function (cb, mdata) {
-                     ws.send({ type: 'subscribe_events', event_type: 'alert2_watch_display_msg', id: msgId });
+                 subscribeMessage: function (cb, mdata) {
+                     console.log('ah, got subscribeMessage', mdata);
+                     msgId += 1;
+                     let myId = msgId;
+                     cbMap['z'+msgId] = cb;
+                     let hmsg = function(ev) {
+                         const msg = JSON.parse(ev.data);
+                         console.log('got ws message inside subscribe: ', msg);
+                     }
+                     ws.addEventListener('message', hmsg);
+                     //ws.send(JSON.stringify({ type: 'subscribe_events', event_type: 'alert2_watch_display_msg', id: msgId }));
+                     mdata.id = msgId;
+                     jasserteq(mdata.type, 'alert2_watch_display_msg');
+                     //ws.send(JSON.stringify({ type: 'alert2_watch_display_msg', id: msgId }));
+                     ws.send(JSON.stringify(mdata));
                  }
              };
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
                  callApi: callApi,
+                 connection: connection,
              };
 
              
-             ws.close();
+             //ws.close();
              
              let ao = document.createElement(eName);
              //console.log('ao is ', ao, eName);
@@ -233,7 +259,7 @@
                  };
              }
              testDiv.appendChild(ao);
-             let z = {ao: ao};
+             let z = {ao: ao, ws: ws, firstHass: newHass};
              if (['alert2-create','alert2-edit-defaults'].includes(eName)) {
                  let c = 0;
                  while (true) {
@@ -1100,13 +1126,64 @@
              z.ao.remove();
          }
          async function doTest6() {
+             let tobj = await callApi('POST', 'alert2test/tcheck',
+                                      { stage:'reset', yaml: {
+                                          alerts: [
+                                              { domain: 'dd', name: 'nn', condition: 'off' },
+                                              { domain: 'dd', name: 'nn2', condition: 'off', display_msg: '{{ states("sensor.a") }}' }
+                                          ]
+                                      } } );
+             jassertObjeq(tobj, {});
+             
              z = await initTest('alert2-overview');
-             z.hass = {
+             const handle_msg = function(ev) {
+                 const msg = JSON.parse(ev.data);
+                 console.log('yay got ws msg', msg);
+             }
+             z.ws.addEventListener('message', handle_msg);
+
+             let recent = new Date();
+             recent.setSeconds(recent.getSeconds() - 10);
+             let recent2 = new Date();
+             recent2.setSeconds(recent2.getSeconds() - 12);
+             let oldHass = z.ao.hass;
+             z.ao.hass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } },
-                           'alert2.dd_nn': { state: 'on', attributes: { last_on_time } }
+                           'alert2.dd_nn': { state: 'on', attributes: { last_on_time: recent.toISOString(),
+                                                                        fires_since_last_notify: 0
+                           }, entity_id: 'alert2.dd_nn' },
+                           'alert2.dd_nn2': { state: 'on', attributes: { last_on_time: recent2.toISOString(),
+                                                                        fires_since_last_notify: 0
+                           }, entity_id: 'alert2.dd_nn2' },
                  },
-                 callApi: callApi,
+                 callApi: z.firstHass.callApi,
+                 connection: z.firstHass.connection,
              };
+             await sleepMs(2000); // for subscription to happen, and actually for refresh to happen
+             console.log('ding');
+             //let ac = z.ao.shadowRoot.querySelector('ha-card');
+             //jassert(ac);
+             let rows = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             jasserteq(rows.length, 2);
+             jassert(rows[0].shadowRoot.textContent.match(/alert2.dd_nn/));
+             jassert(rows[1].shadowRoot.textContent.match(/alert2.dd_nn2/));
+
+             console.log(rows);
+             let ad;
+             ad = rows[0].shadowRoot.querySelector('div.dispMsg');
+             jassert(!ad);
+             ad = rows[1].shadowRoot.querySelector('div.dispMsg');
+             jassert(!ad);
+
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.a', state: 'yippy'});
+             jassertObjeq(tobj, {});
+             
+             console.log('long sleep............');
+             while (true) {
+                 //console.log(z.ws.readyState);
+                 await sleepMs(3000);
+             }
          }
         </script>
     </head>
