@@ -2,7 +2,7 @@
 <html lang="en">
     <!-- 
          Run server with (from the Alert2 repo):
-             JTEST_JS_DIR=/home/redstone/home-monitoring/homeassistant/www  venv/bin/pytest tests/test_server.py
+              JTESTDIR=/home/redstone/home-monitoring/homeassistant JTEST_JS_DIR=/home/redstone/tmp/hass-alert2-ui venv/bin/pytest tests/test_server.py
          View page at:
              http://localhost:50005/jtest/tests/t2.html
          
@@ -97,7 +97,7 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
+             if (0) {
                  jassert(await startTest(doTest6));
                  return;
              }
@@ -228,6 +228,13 @@
                      cbMap['z'+msgId] = cb;
                      let hmsg = function(ev) {
                          const msg = JSON.parse(ev.data);
+                         if (cbMap['z'+msg.id]) {
+                             jassert(msg.type == 'event' || msg.type == 'result');
+                             if (msg.type == 'event') {
+                                 jasserteq(msg.type, 'event');
+                                 cbMap['z'+msg.id](msg.event);
+                             }
+                         }
                          console.log('got ws message inside subscribe: ', msg);
                      }
                      ws.addEventListener('message', hmsg);
@@ -236,6 +243,7 @@
                      jasserteq(mdata.type, 'alert2_watch_display_msg');
                      //ws.send(JSON.stringify({ type: 'alert2_watch_display_msg', id: msgId }));
                      ws.send(JSON.stringify(mdata));
+                     return new Promise((resolve)=>{ resolve( ()=>{} ); } );
                  }
              };
              let newHass = {
@@ -638,6 +646,24 @@
              await z.checkRender('condition', /result:true/);
              await z.setField('condition', 'off');
 
+             // condition_on
+             await z.setField('condition_on', '');
+             await z.checkField('condition_on', null);
+             await z.setField('condition_on', 'on');
+             await z.checkRender('condition_on', /result:true/);
+             await z.setField('condition_on', '{{"yes"}}');
+             await z.checkRender('condition_on', /result:true/);
+             await z.setField('condition_on', 'off');
+
+             // condition_off
+             await z.setField('condition_off', '');
+             await z.checkField('condition_off', null);
+             await z.setField('condition_off', 'on');
+             await z.checkRender('condition_off', /result:true/);
+             await z.setField('condition_off', '{{"yes"}}');
+             await z.checkRender('condition_off', /result:true/);
+             await z.setField('condition_off', 'off');
+
              // trigger
              await z.setField('trigger', '');
              await z.checkField('trigger', null);
@@ -647,6 +673,26 @@
              await z.checkRender('trigger', /\[{"platform":"state/);
              await z.setField('trigger', '');
              await z.checkField('trigger', null);
+
+             // trigger_on
+             await z.setField('trigger_on', '');
+             await z.checkField('trigger_on', null);
+             await z.setField('trigger_on', 'on');
+             await z.checkRender('trigger_on', /is not iterable/);
+             await z.setField('trigger_on', "[{'platform':'state','entity_id':'sensor.zz'}]");
+             await z.checkRender('trigger_on', /\[{"platform":"state/);
+             await z.setField('trigger_on', '');
+             await z.checkField('trigger_on', null);
+
+             // trigger_off
+             await z.setField('trigger_off', '');
+             await z.checkField('trigger_off', null);
+             await z.setField('trigger_off', 'on');
+             await z.checkRender('trigger_off', /is not iterable/);
+             await z.setField('trigger_off', "[{'platform':'state','entity_id':'sensor.zz'}]");
+             await z.checkRender('trigger_off', /\[{"platform":"state/);
+             await z.setField('trigger_off', '');
+             await z.checkField('trigger_off', null);
 
              // threshold: value
              await z.setField('value', '3');
@@ -687,6 +733,18 @@
              await z.checkRender('early_start', /result:false/);
              await z.setField('early_start', '');
              await z.checkField('early_start', null);
+
+             // manual_on
+             await z.setField('manual_on', 'off');
+             await z.checkRender('manual_on', /result:false/);
+             await z.setField('manual_on', '');
+             await z.checkField('manual_on', null);
+
+             // manual_off
+             await z.setField('manual_off', 'off');
+             await z.checkRender('manual_off', /result:false/);
+             await z.setField('manual_off', '');
+             await z.checkField('manual_off', null);
 
              // message
              await z.setField('message', 'yay');
@@ -1102,13 +1160,19 @@
              z.checkDefault('name', null);
              z.checkDefault('friendly_name', null);
              z.checkDefault('condition', null);
+             z.checkDefault('condition_on', null);
+             z.checkDefault('condition_off', null);
              z.checkDefault('trigger', null);
+             z.checkDefault('trigger_on', null);
+             z.checkDefault('trigger_off', null);
              z.checkDefault('value', null);
              z.checkDefault('hysteresis', null);
              z.checkDefault('minimum', null);
              z.checkDefault('maximum', null);
              z.checkDefault('delay_on_secs', null);
              z.checkDefault('early_start', null);
+             z.checkDefault('manual_off', null);
+             z.checkDefault('manual_on', null);
              z.checkDefault('message', null);
              z.checkDefault('done_message', null);
              z.checkDefault('notifier', /empty: "happy"/);
@@ -1134,6 +1198,9 @@
                                           ]
                                       } } );
              jassertObjeq(tobj, {});
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.a', state: 'yippy'});
+             jassertObjeq(tobj, {});
              
              z = await initTest('alert2-overview');
              const handle_msg = function(ev) {
@@ -1150,10 +1217,12 @@
              z.ao.hass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } },
                            'alert2.dd_nn': { state: 'on', attributes: { last_on_time: recent.toISOString(),
-                                                                        fires_since_last_notify: 0
+                                                                        fires_since_last_notify: 0,
+                                                                        domain: 'dd', name: 'nn',
                            }, entity_id: 'alert2.dd_nn' },
                            'alert2.dd_nn2': { state: 'on', attributes: { last_on_time: recent2.toISOString(),
-                                                                        fires_since_last_notify: 0
+                                                                        fires_since_last_notify: 0,
+                                                                        domain: 'dd', name: 'nn2',
                            }, entity_id: 'alert2.dd_nn2' },
                  },
                  callApi: z.firstHass.callApi,
@@ -1173,17 +1242,29 @@
              ad = rows[0].shadowRoot.querySelector('div.dispMsg');
              jassert(!ad);
              ad = rows[1].shadowRoot.querySelector('div.dispMsg');
-             jassert(!ad);
-
-             tobj = await callApi('POST', 'alert2test/tcheck',
-                                  { stage:'setEnt', entity_id: 'sensor.a', state: 'yippy'});
-             jassertObjeq(tobj, {});
+             jassert(ad);
+             console.log(ad.textContent);
+             jassert(ad.textContent.match(/yippy/));
              
-             console.log('long sleep............');
-             while (true) {
-                 //console.log(z.ws.readyState);
-                 await sleepMs(3000);
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.a', state: 'yi<b>pp</b>y2'});
+             jassertObjeq(tobj, {});
+             await sleepMs(100);
+             ad = rows[0].shadowRoot.querySelector('div.dispMsg');
+             jassert(!ad);
+             ad = rows[1].shadowRoot.querySelector('div.dispMsg');
+             jassert(ad);
+             console.log(ad.textContent);
+             jassert(ad.textContent.match(/yi<b>pp<.b>y2/));
+             
+             if (0) {
+                 console.log('long sleep............');
+                 while (true) {
+                     //console.log(z.ws.readyState);
+                     await sleepMs(3000);
+                 }
              }
+             z.ao.remove();
          }
         </script>
     </head>

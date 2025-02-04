@@ -60,6 +60,10 @@
          }
         </style>
         <script>
+         const connection = {
+             subscribeMessage: function (cb, mdata) { return new Promise((resolve)=>{ resolve( ()=>{} ); } ); }
+         };
+
          function waitForEvent(element, eventName) {
              return new Promise((resolve) => {
                  element.addEventListener(eventName, (event) => {
@@ -117,7 +121,8 @@
          }
          function cloneHass(ahass) {
                  return {
-                     states: Object.assign({}, ahass['states'])
+                     states: Object.assign({}, ahass['states']),
+                     connection: connection
                  };
          }
          function createState(name, onAgoMs, offAgoMs, ackAgoMs=200) {
@@ -141,7 +146,8 @@
              let testDiv = document.querySelector('#testDiv');
              testStatusEl.innerHTML = `Test: Running ${afunc.name}...`;
              let newHass = {
-                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } }
+                 states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
+                 connection: connection
              };
              if (withAO) {
                  let ao = document.createElement('alert2-overview');

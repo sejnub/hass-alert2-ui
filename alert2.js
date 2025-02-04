@@ -528,11 +528,13 @@ class Alert2EntityRow extends LitElement  {
     }
     checkDisplayMsg() {
         if (!this._unsubFuncPromise) {
+            const stateObj = this._hass.states[this._config.entity];
             this._unsubFuncPromise = this._hass.connection.subscribeMessage(
                 (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
                     type: 'alert2_watch_display_msg',
-                    domain: 'dfoo',
-                    name: 'nfoo'
+                    //entity_id: stateObj.entity_id,
+                    domain: stateObj.attributes['domain'],
+                    name: stateObj.attributes['name'],
                 });
         }
     }
@@ -638,7 +640,8 @@ class Alert2EntityRow extends LitElement  {
       }
       div.dispMsg {
          font-size: 0.9em;
-         border: 1px solid green;
+         /*border: 1px solid green;*/
+         margin-left: 22px;
       }
     `;
 }
@@ -2527,11 +2530,13 @@ class Alert2Create extends LitElement {
             } else {
                 let rawVal = this.alertCfg[fname].trim();
                 let val;
-                if (['domain','name', 'friendly_name', 'condition', 'message', 'title', 'target',
-                     'annotate_messages', 'early_start', 'generator_name',
+                if (['domain','name', 'friendly_name', 'condition', 'condition_on', 'condition_off', 'message',
+                     'title', 'target',
+                     'annotate_messages', 'early_start', 'generator_name', 'manual_on', 'manual_off',
                      'done_message', 'display_msg', 'delay_on_secs'].includes(fname)) {
                     val = yamlEscape(rawVal);
-                } else if (['trigger', 'data', 'throttle_fires_per_mins', 'reminder_frequency_mins',
+                } else if (['trigger', 'trigger_on', 'trigger_off', 'data', 'throttle_fires_per_mins',
+                            'reminder_frequency_mins',
                             ].includes(fname)) {
                     val = rawVal;
                 } else if (['generator', 'notifier', 'summary_notifier'].includes(fname)) {
@@ -2542,7 +2547,7 @@ class Alert2Create extends LitElement {
                         val = rawVal;
                     }
                 }
-                if (['trigger', 'data'].includes(fname)) {
+                if (['trigger', 'trigger_on', 'trigger_off', 'data'].includes(fname)) {
                     val = val.replace('\n', '\n      ');
                     yaml += `${fname}:\n      ${val}`;
                 } else {
@@ -2602,6 +2607,22 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.trigger}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="condition_on" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.condition_on}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="condition_off" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.condition_off}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="trigger_on" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.trigger_on}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="trigger_off" type=${FieldTypes.TEMPLATE}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.trigger_off}</div></alert2-cfg-field>
             <div><span style="visibility:hidden">*</span>Threshold <div style="margin-left: 1.5em;">
                <alert2-cfg-field .hass=${this.hass} name="value" type=${FieldTypes.TEMPLATE}
                     @expand-click=${this.expandClick} @change=${this._change} namePrefix="threshold"
@@ -2629,6 +2650,14 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.early_start}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="manual_on" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.manual_on}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="manual_off" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.manual_off}</div></alert2-cfg-field>
 
             <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}
@@ -2736,55 +2765,6 @@ class Alert2Create extends LitElement {
      }
      ${extableCss}
       `;
-    _topRadioClick(ev) {
-        let value = ev.detail?.value || ev.target.value;
-        //console.log('radio clicked', value);
-    }
-    _topClick(name, ev) {
-        //console.log('top clicked', name, TopTypes.EVENT, this);
-        this.topType = name;
-    }
-    _domainChange(ev) {
-        let value = ev.detail?.value || ev.target.value;
-        this.alertCfg.domain = value;
-    }
-    _nameChange(ev) {
-        let value = ev.detail?.value || ev.target.value;
-        this.alertCfg.name = value;
-    }
-    _friendlynameChange(ev) {
-        let value = ev.detail?.value || ev.target.value;
-        this.alertCfg.friendly_name = value;
-    }
-    _conditionChange(ev) {
-        let value = ev.detail?.value || ev.target.value;
-        this.conditionTxt = value;
-        this.conditionEvalD(); // will call conditionEval in a bit
-    }
-    async doConditionEval() {
-        if (!this.conditionTxt) {
-            this.conditionEval = { rendering: false, error: null, result: null };
-            return;
-        }
-        this.conditionEval = { rendering: true, error: null, result: null };
-        console.log('cond eval', this.conditionTxt);
-        let retv;
-        try {
-            retv = await this.hass.callApi('POST', 'alert2/templateRender',
-                                           { type: 'condition', txt: this.conditionTxt });
-        } catch (err) {
-            this.conditionEval = { rendering: false, error: 'http err: ' + JSON.stringify(err), result: null };
-            return;
-        }
-        console.log('got render response: ', retv);
-        if (Object.hasOwn(retv, 'error')) {
-            this.conditionEval = { rendering: false, error: retv.error, result: null };
-        } else if (Object.hasOwn(retv, 'rez')) {
-            this.conditionEval = { rendering: false, error: null, result: retv.rez };
-        } else {
-            this.conditionEval = { rendering: false, error: 'bad result: ' + JSON.stringify(retv), result: null };
-        }
-    }
 }
 
 customElements.define('alert2-manager', Alert2Manager);
