@@ -98,7 +98,7 @@
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
              if (0) {
-                 jassert(await startTest(doTest6));
+                 jassert(await startTest(doTest7));
                  return;
              }
              jassert(await startTest(doTest1));
@@ -107,6 +107,7 @@
              jassert(await startTest(doTest4));
              jassert(await startTest(doTest5));
              jassert(await startTest(doTest6));
+             jassert(await startTest(doTest7));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -246,9 +247,17 @@
                      return new Promise((resolve)=>{ resolve( ()=>{} ); } );
                  }
              };
+             let callWs = async function(params) {
+                 msgId += 1;
+                 let myId = msgId;
+                 jasserteq(params.type, 'execute_script');
+                 params.id = myId;
+                 ws.send(JSON.stringify(params));
+             }
              let newHass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } } },
                  callApi: callApi,
+                 callWs: callWs,
                  connection: connection,
              };
 
@@ -267,7 +276,7 @@
                  };
              }
              testDiv.appendChild(ao);
-             let z = {ao: ao, ws: ws, firstHass: newHass};
+             let z = {ao: ao, ws: ws, firstHass: newHass, callWs: callWs };
              if (['alert2-create','alert2-edit-defaults'].includes(eName)) {
                  let c = 0;
                  while (true) {
@@ -771,6 +780,8 @@
              await z.checkRender('notifier', /result \(len=2\):\["a","b"\]/);
              await z.setField('notifier', '');
              await z.checkField('notifier', null);
+             await z.setField('notifier', 'null');
+             await z.checkRender('notifier', /result \(len=0\):\[\]/);
 
              // summary_notifier
              await z.setField('summary_notifier', 'yay');
@@ -797,6 +808,8 @@
              await z.checkRender('display_msg', /result:"ab"/);
              await z.setField('display_msg', '');
              await z.checkField('display_msg', null);
+             await z.setField('display_msg', 'null');
+             await z.checkRender('display_msg', /result:null/);
 
              // target
              await z.setField('target', 'yay');
@@ -1190,13 +1203,11 @@
              z.ao.remove();
          }
          async function doTest6() {
-             let tobj = await callApi('POST', 'alert2test/tcheck',
-                                      { stage:'reset', yaml: {
-                                          alerts: [
-                                              { domain: 'dd', name: 'nn', condition: 'off' },
-                                              { domain: 'dd', name: 'nn2', condition: 'off', display_msg: '{{ states("sensor.a") }}' }
-                                          ]
-                                      } } );
+             let yamlCfg = { alerts: [
+                 { domain: 'dd', name: 'nn', condition: 'off' },
+                 { domain: 'dd', name: 'nn2', condition: 'off', display_msg: '{{ states("sensor.a") }}' }
+             ] };
+             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              jassertObjeq(tobj, {});
              tobj = await callApi('POST', 'alert2test/tcheck',
                                   { stage:'setEnt', entity_id: 'sensor.a', state: 'yippy'});
@@ -1213,7 +1224,6 @@
              recent.setSeconds(recent.getSeconds() - 10);
              let recent2 = new Date();
              recent2.setSeconds(recent2.getSeconds() - 12);
-             let oldHass = z.ao.hass;
              z.ao.hass = {
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } },
                            'alert2.dd_nn': { state: 'on', attributes: { last_on_time: recent.toISOString(),
@@ -1226,6 +1236,7 @@
                            }, entity_id: 'alert2.dd_nn2' },
                  },
                  callApi: z.firstHass.callApi,
+                 callWs: z.firstHass.callWs,
                  connection: z.firstHass.connection,
              };
              await sleepMs(2000); // for subscription to happen, and actually for refresh to happen
@@ -1256,6 +1267,25 @@
              jassert(ad);
              console.log(ad.textContent);
              jassert(ad.textContent.match(/yi<b>pp<.b>y2/));
+
+             // Test harness doesn't support reload
+             //await z.callWs({ type: "execute_script", sequence: [ { service: 'alert2.reload', data: {}, }], });
+
+             // Check to see if we track display_msg even if reload happens
+             //
+             yamlCfg.alerts[1].display_msg = '{{ states("sensor.b") }}';
+             tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.a', state: 'yippy3'});
+             jassertObjeq(tobj, {});
+             await sleepMs(100);
+             ad = rows[0].shadowRoot.querySelector('div.dispMsg');
+             jassert(!ad);
+             ad = rows[1].shadowRoot.querySelector('div.dispMsg');
+             jassert(ad);
+             console.log(ad.textContent);
+             jassert(ad.textContent.match(/unknown/)); // since sensor.b doesn't exist
              
              if (0) {
                  console.log('long sleep............');
@@ -1264,6 +1294,24 @@
                      await sleepMs(3000);
                  }
              }
+
+             z.ao.remove();
+         }
+         async function doTest7() {
+             // Make sure null for notifier and display_msg get saved correctly
+             z = await initTest('alert2-create');
+             await sleepMs(10); // seems to help dom get itself sorted out
+             await z.setField('domain', 'd1');
+             await z.setField('name', 'ny');
+             await z.setField('condition', 'off');
+             await z.setField('notifier', 'null');
+             await z.setField('display_msg', 'null');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             jassertObjeq(await callApi('POST', 'alert2test/tcheck', { stage:'getUiData'} ),
+                          {config:{ defaults: {}, alerts: [
+                              { domain: 'd1', name: 'ny', condition: 'off', notifier: 'null', display_msg: 'null' }
+                          ]}})
              z.ao.remove();
          }
         </script>

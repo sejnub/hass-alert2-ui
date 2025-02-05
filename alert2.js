@@ -1735,7 +1735,7 @@ class Alert2CfgField extends LitElement {
         this.expanded = false;
         this.required = false; // default
         this.renderD = debounce(this.doRenderTemplate.bind(this), gDebounceMs);
-        this.renderInfo = { rendering: false, error: null, result: null };
+        this.renderInfo = { rendering: false, error: null, result: undefined };
         this.focusOnce = false;
         this.addEventListener('focus', this._handleFocus);
         //this.showRendered = false;
@@ -1759,7 +1759,7 @@ class Alert2CfgField extends LitElement {
         let value = uToE(this.getValue());
         //console.log('doRenderTemplate', this.name, value);
         if (!value) {
-            this.renderInfo = { rendering: false, error: null, result: null };
+            this.renderInfo = { rendering: false, error: null, result: undefined };
             if (this.name == 'generator') {
                 jFireEvent(this, "generator-result", { generatorResult: null });
             }
@@ -1776,7 +1776,7 @@ class Alert2CfgField extends LitElement {
                                            { txt: value, name: nameToUse, extraVars: extraVars });
         } catch (err) {
             this.renderInfo = { rendering: false, error: 'http err: ' + JSON.stringify(err),
-                                result: null };
+                                result: undefined };
             return;
         }
         //console.log('doRenderTemplate RESPONSE ', this.name, retv);
@@ -1790,9 +1790,9 @@ class Alert2CfgField extends LitElement {
         }
         if (!Object.hasOwn(retv, 'error') && !Object.hasOwn(retv, 'rez')) {
             this.renderInfo = { rendering: false, error: 'bad result: ' + JSON.stringify(retv),
-                                result: null };
+                                result: undefined };
         } else {
-            this.renderInfo = resp;
+            this.renderInfo = resp; // could be null
             if (this.name == 'generator') {
                 jFireEvent(this, "generator-result", { generatorResult: resp.result });
             }
@@ -1938,7 +1938,7 @@ class Alert2CfgField extends LitElement {
             } else if (this.type == FieldTypes.BOOL) {
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.name == 'generator') {
-                    if (this.renderInfo.result) {
+                    if (this.renderInfo.result !== undefined) {
                         let firstOnly = '';
                         if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
                             firstOnly = `, showing first ${this.renderInfo.result.list.length}`;
@@ -1949,7 +1949,7 @@ class Alert2CfgField extends LitElement {
                     }
                 }
                 if (0) {
-                    if (this.templateType == TemplateTypes.LIST && this.renderInfo.result) {
+                    if (this.templateType == TemplateTypes.LIST && this.renderInfo.result !== undefined) {
                         let firstOnly = '';
                         if (this.name == 'generator') {
                             if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
@@ -1970,7 +1970,7 @@ class Alert2CfgField extends LitElement {
                 //console.log('got array result', this.renderInfo.result);
                 lenStr = html` (len=${this.renderInfo.result.length})`;
             }
-            renderHtml = (this.renderInfo.result != null) ? html`<div style="display: flex; flex-flow: row; align-items:center;" class="renderResult">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
+            renderHtml = (this.renderInfo.result !== undefined) ? html`<div style="display: flex; flex-flow: row; align-items:center;" class="renderResult">Render result${lenStr}:<div class="rendered" style="margin-left: 1em;">${renderedStr}</div></div>`:"";
         }
         // Final value combinbg default as inputted value
         //<code class="avalue">${displayStr(finalValue)}</code>
