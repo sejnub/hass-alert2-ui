@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.9  (internal 42)';
+const VERSION = 'v1.9  (internal 43)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -482,31 +482,37 @@ class Alert2Overview extends LitElement {
 class Alert2EntityRow extends LitElement  {
     static properties = {
         _config: {state: true},
-        display_msg: { state: true},
+        display_msg: { state: true },
+        has_display_msg: { state: true },
     }
     set hass(nh) {
         if (nh && this._config) {
             const newStateObj = nh.states[this._config.entity];
+            const oldStateObj = this._hass ? this._hass.states[this._config.entity] : null;
             this._hass = nh;
-            if (this.shadowRoot) {
-                this.shadowRoot.querySelectorAll("ha-alert2-state").forEach((element) => {
-                    element.stateObj = newStateObj;
-                });
+            if (newStateObj !== oldStateObj) {
+                let newHasDM = newStateObj.attributes['has_display_msg'];
+                this.has_display_msg = newHasDM;
+                //console.log(this._config.entity, 'set has_display_msg to', this.has_display_msg);
+                this.checkDisplayMsg();
+
+                if (this.shadowRoot) {
+                    this.shadowRoot.querySelectorAll("ha-alert2-state").forEach((element) => {
+                        element.stateObj = newStateObj;
+                    });
+                }
             }
-            //if (newStateObj !== this._stateObj) {
-             //   this._stateObj = newStateObj;
-                //this.checkDisplayMsg();
-            //}
         }
     }
     constructor() {
         super();
         this._hass = null;
         this._config = null;
-        this._stateEl = null;
+
         this.display_msg = null;
-        //this._stateObj = null;
-        this._unsubFuncPromise = null;
+        this.has_display_msg = false;
+        this._unsubFunc = null;
+        this._subscribeInProgress = false;
     }
     setConfig(config) {
         if (!config || !config.entity) {
@@ -516,30 +522,79 @@ class Alert2EntityRow extends LitElement  {
     }
     connectedCallback() {
         super.connectedCallback();
+        this.has_display_msg = false;
+        if (this._hass && this._config) {
+            const stateObj = this._hass.states[this._config.entity];
+            this.has_display_msg = stateObj.attributes['has_display_msg'];
+            //console.log(this._config.entity, 'foo');
+        }
+        //console.log(this._config.entity, 'connectedCallback: set has_display_msg to', this.has_display_msg);
         this.checkDisplayMsg();
     }
     disconnectedCallback() {
+        //console.log(this._config.entity, 'disconnectedCallback');
         super.disconnectedCallback();
-        if (this._unsubFuncPromise) {
-            let puf = this._unsubFuncPromise;
-            this._unsubFuncPromise = null;
-            puf.then(unsubFunc => unsubFunc());
-        }
+        this.has_display_msg = false;
+        this.checkDisplayMsg();
     }
-    checkDisplayMsg() {
-        if (!this._unsubFuncPromise) {
+    async checkDisplayMsg() {
+        console.log(this._config.entity, 'checkDisplayMsg', this._subscribeInProgress, this.has_display_msg, this._unsubFunc);
+        if (this._subscribeInProgress) {
+            return;
+        }
+        let trySubscribe = false;
+        if (this.has_display_msg) {
+            if (this._unsubFunc) {
+                // We want to be subscribed and are.  Good to go.
+                //console.log(this._config.entity, 'checkDisplayMsg: subscribed and good to go');
+            } else {
+                // Try to subscribe
+                trySubscribe = true;
+                //console.log(this._config.entity, 'checkDisplayMsg: subscribe');
+            }
+        } else {
+            if (this._unsubFunc) {
+                // We don't want to be subscribed but are. Unsubscribe
+                //console.log(this._config.entity, 'checkDisplayMsg: unsubscribe');
+                this._unsubFunc();
+                this._unsubFunc = null;
+                this.display_msg = null;
+            } else {
+                // We don't want to be subscribed and aren't.  Good to go.
+                //console.log(this._config.entity, 'checkDisplayMsg: unsubscribed and good to go');
+            }
+        }
+        if (trySubscribe) {
+            //console.log(this._config.entity, 'trySubscribe');
+            this._subscribeInProgress = true;
+            // I think trySubscribe=true implies that this._hass && this._config
             const stateObj = this._hass.states[this._config.entity];
-            this._unsubFuncPromise = this._hass.connection.subscribeMessage(
-                (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
-                    type: 'alert2_watch_display_msg',
-                    //entity_id: stateObj.entity_id,
-                    domain: stateObj.attributes['domain'],
-                    name: stateObj.attributes['name'],
-                });
+            try {
+                this._unsubFunc = await this._hass.connection.subscribeMessage(
+                    (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
+                        type: 'alert2_watch_display_msg',
+                        domain: stateObj.attributes['domain'],
+                        name: stateObj.attributes['name'],
+                    });
+                //console.log(this._config.entity, 'trySubscribe success');
+            } catch (err) {
+                //console.log(this._config.entity, 'trySubscribe err=', err.code);
+                if (err.code === 'no_display_msg') {
+                    // pass - maybe ent doesn't have a display message
+                //} else if (err.code == 'ent_not_found') {
+                    // pass - could be ent is a tracked alert and so can't have a display message
+                } else {
+                    console.error('subscribeMessage for ', this._config.entity, 'got error', err);
+                }
+            }
+            this._subscribeInProgress = false;
+            // Go around loop one more time, in case we had an error and need to try again.
+            // If the subscribe succeeded, then trySubscribe will be false next time and we won't do any work.
+            setTimeout(()=>{ this.checkDisplayMsg(); }, 1000);
         }
     }
     updateDisplayMsg(ev) {
-        console.log('updateDisplayMsg to ', ev.rendered);
+        console.log(this._config.entity, 'updateDisplayMsg to ', ev.rendered);
         this.display_msg = ev.rendered;
     }
     
@@ -573,7 +628,7 @@ class Alert2EntityRow extends LitElement  {
         //       <div class="awrapper">
         //    </div>
         let dispMsgHtml = ``;
-        if (this.display_msg) {
+        if (this.display_msg !== null) {
             dispMsgHtml = html`<div class="dispMsg">${this.display_msg}</div>`;
         }
         return html`
@@ -1803,7 +1858,7 @@ class Alert2CfgField extends LitElement {
         this._cardConfig = config;
     }
     _handleFocus(ev) {
-        console.log('_handleFocus', ev.target.nodeName);
+        //console.log('_handleFocus', ev.target.nodeName);
         return true;
         //this.expanded = true;
         //this.focusOnce = true;
