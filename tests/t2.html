@@ -98,7 +98,7 @@
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
              if (0) {
-                 jassert(await startTest(doTest7));
+                 jassert(await startTest(doTest8));
                  return;
              }
              jassert(await startTest(doTest1));
@@ -108,6 +108,7 @@
              jassert(await startTest(doTest5));
              jassert(await startTest(doTest6));
              jassert(await startTest(doTest7));
+             jassert(await startTest(doTest8));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -221,30 +222,42 @@
              });
              await done;
              let msgId = 1;
+             let hmsg = function(ev) {
+                 const msg = JSON.parse(ev.data);
+                 console.log('got ws message inside subscribe: ', msg);
+                 if (cbMap['z'+msg.id]) {
+                     jassert(msg.type == 'event' || msg.type == 'result');
+                     if (msg.type == 'event') {
+                         jasserteq(msg.type, 'event');
+                         cbMap['z'+msg.id](msg.event);
+                     }
+                 }
+                 if (msg.type == 'result') {
+                     jasserteq(msg.success, true);
+                 }
+             }
+             ws.addEventListener('message', hmsg);
+
              let connection = {
                  subscribeMessage: function (cb, mdata) {
-                     console.log('ah, got subscribeMessage', mdata);
                      msgId += 1;
                      let myId = msgId;
-                     cbMap['z'+msgId] = cb;
-                     let hmsg = function(ev) {
-                         const msg = JSON.parse(ev.data);
-                         if (cbMap['z'+msg.id]) {
-                             jassert(msg.type == 'event' || msg.type == 'result');
-                             if (msg.type == 'event') {
-                                 jasserteq(msg.type, 'event');
-                                 cbMap['z'+msg.id](msg.event);
-                             }
-                         }
-                         console.log('got ws message inside subscribe: ', msg);
-                     }
-                     ws.addEventListener('message', hmsg);
-                     //ws.send(JSON.stringify({ type: 'subscribe_events', event_type: 'alert2_watch_display_msg', id: msgId }));
-                     mdata.id = msgId;
+                     console.log(`ah, got call to subscribeMessage. new id=${myId}. mdata=`, mdata);
+                     cbMap['z'+myId] = cb;
+                     let subDonePromise = new Promise((resolve)=>{
+                         resolve( ()=>{
+                             msgId += 1;
+                             let myId2 = msgId;
+                             console.log(`Got unsubscribe to id=${myId}. Sending unsub with id=${myId2}`);
+                             jassert(cbMap['z'+myId]);
+                             delete cbMap['z'+myId];
+                             ws.send(JSON.stringify({ type: 'unsubscribe_events', subscription: myId, id: myId2 }));
+                         } );
+                     });
+                     mdata.id = myId;
                      jasserteq(mdata.type, 'alert2_watch_display_msg');
-                     //ws.send(JSON.stringify({ type: 'alert2_watch_display_msg', id: msgId }));
                      ws.send(JSON.stringify(mdata));
-                     return new Promise((resolve)=>{ resolve( ()=>{} ); } );
+                     return subDonePromise;
                  }
              };
              let callWs = async function(params) {
@@ -1228,10 +1241,12 @@
                  states: { 'binary_sensor.alert2_ha_startup_done' : { attributes: { manifest_version: 'v.a.b.c' } },
                            'alert2.dd_nn': { state: 'on', attributes: { last_on_time: recent.toISOString(),
                                                                         fires_since_last_notify: 0,
+                                                                        has_display_msg: false,
                                                                         domain: 'dd', name: 'nn',
                            }, entity_id: 'alert2.dd_nn' },
                            'alert2.dd_nn2': { state: 'on', attributes: { last_on_time: recent2.toISOString(),
-                                                                        fires_since_last_notify: 0,
+                                                                         fires_since_last_notify: 0,
+                                                                         has_display_msg: true,
                                                                         domain: 'dd', name: 'nn2',
                            }, entity_id: 'alert2.dd_nn2' },
                  },
@@ -1314,6 +1329,150 @@
                           ]}})
              z.ao.remove();
          }
+         async function doTest8() {
+             let z = await initTest('alert2-overview');
+             let yamlCfg = { alerts: [
+                 { domain: 'dd', name: 'foo', condition: 'off', display_msg: '{{ states("sensor.foo") }}' },
+                 { domain: 'dd', name: 'bar', condition: 'off', display_msg: '{{ states("sensor.bar") }}' }
+             ] };
+             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.foo', state: 'sfoo'} );
+             jassertObjeq(tobj, {});
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.bar', state: 'sbar'} );
+             jassertObjeq(tobj, {});
+
+             let alert2Tools = customElements.get('alert2-tools');
+             let hass = { states: {
+                 'alert2.dd_foo': { attributes: { domain: 'dd', name: 'foo', has_display_msg: false } },
+                 'alert2.dd_bar': { attributes: { domain: 'dd', name: 'bar', has_display_msg: true } } },
+                          callApi: z.firstHass.callApi,
+                          callWs: z.firstHass.callWs,
+                          connection: z.firstHass.connection
+             };
+             
+             let dm = new alert2Tools.DisplayValMonitor();
+             dm.updateHass(hass);
+             let cb1Calls = [];
+             let cb1 = (msg, has_msg) => { cb1Calls.push({msg, has_msg}); };
+             let cb2Calls = [];
+             let cb2 = (msg, has_msg) => { cb2Calls.push({msg, has_msg}); };
+
+             dm.addChangeCb('alert2.dd_foo', cb1);
+             tobj = cb1Calls.pop();
+             jassertObjeq(tobj, {msg: null, has_msg: false});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+
+             // Initial result is null, cuz hasn't had time to fetch
+             dm.addChangeCb('alert2.dd_bar', cb2);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: null, has_msg: true});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+
+             // First fetch of display_msg
+             await sleepMs(100);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: 'sbar', has_msg: true});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+
+             // Update template val, should update in the monitor
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.bar', state: 'sbar2'} );
+             jassertObjeq(tobj, {});
+             await sleepMs(100);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: 'sbar2', has_msg: true});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+
+             // Reloading config shouldn't change vals
+             // only bar refreshes val cuz foo has has_display_msg set to false
+             tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             await sleepMs(100);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: 'sbar2', has_msg: true});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+             
+             // set has_display_msg false for bar.
+             hass = { states: {
+                 'alert2.dd_foo': { attributes: { domain: 'dd', name: 'foo', has_display_msg: false } },
+                 'alert2.dd_bar': { attributes: { domain: 'dd', name: 'bar', has_display_msg: false } } },
+                      callApi: z.firstHass.callApi,
+                      callWs: z.firstHass.callWs,
+                      connection: z.firstHass.connection
+             };
+             dm.updateHass(hass);
+             await sleepMs(100);
+             jasserteq(cb1Calls.length, 1);
+             tobj = cb1Calls.pop();
+             jassertObjeq(tobj, {msg: null, has_msg: false});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: 'sbar2', has_msg: false});
+             jasserteq(cb2Calls.length, 0);
+
+             // now set has_display_msg true for foo.
+             hass = { states: {
+                 'alert2.dd_foo': { attributes: { domain: 'dd', name: 'foo', has_display_msg: true } },
+                 'alert2.dd_bar': { attributes: { domain: 'dd', name: 'bar', has_display_msg: false } } },
+                      callApi: z.firstHass.callApi,
+                      callWs: z.firstHass.callWs,
+                      connection: z.firstHass.connection
+             };
+             dm.updateHass(hass);
+             await sleepMs(100);
+             jasserteq(cb1Calls.length, 2);
+             tobj = cb1Calls.shift();
+             // First cb to convey has_display_msg has changed to true
+             jassertObjeq(tobj, {msg: null, has_msg: true});
+             tobj = cb1Calls.shift();
+             // One cb cuz server sends initial value of sfoo
+             jassertObjeq(tobj, {msg: 'sfoo', has_msg: true});
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.pop();
+             jassertObjeq(tobj, {msg: null, has_msg: false});
+             jasserteq(cb2Calls.length, 0);
+
+             // Now switch cb2 from bar to foo
+             dm.removeChangeCb('alert2.dd_bar', cb2);
+             await sleepMs(50);
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 0);
+             dm.addChangeCb('alert2.dd_foo', cb2);
+             await sleepMs(50);
+             jasserteq(cb1Calls.length, 0);
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.shift();
+             jassertObjeq(tobj, {msg: 'sfoo', has_msg: true});
+             jasserteq(cb2Calls.length, 0);
+
+             // update foo should update both cbs
+             tobj = await callApi('POST', 'alert2test/tcheck',
+                                  { stage:'setEnt', entity_id: 'sensor.foo', state: 'sfoo2'} );
+             jassertObjeq(tobj, {});
+             await sleepMs(100);
+             jasserteq(cb1Calls.length, 1);
+             tobj = cb1Calls.shift();
+             jassertObjeq(tobj, {msg: 'sfoo2', has_msg: true});
+             jasserteq(cb2Calls.length, 1);
+             tobj = cb2Calls.shift();
+             jassertObjeq(tobj, {msg: 'sfoo2', has_msg: true});
+
+             z.ao.remove();
+         }
+         
         </script>
     </head>
     <body>
