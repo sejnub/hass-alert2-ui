@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.9  (internal 46)';
+const VERSION = 'v1.9.1  (internal 47)';
 console.log(`alert2 ${VERSION}`);
 
 let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -798,7 +798,8 @@ class Alert2EntityRow extends LitElement  {
       div.dispMsg {
          font-size: 0.9em;
          /*border: 1px solid green;*/
-         margin-left: 22px;
+         /*margin-left: 22px;*/
+         text-align: right;
       }
     `;
 }
@@ -2226,6 +2227,7 @@ let helpCommon = {
                        <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
                        <div>List of notifiers (YAML):</div><div class="exval"><pre>- telegram1\n- telegram2</code></pre></div>
                        <div>Template producing list of notifiers:</div><div class="exval"><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                       <div>null for no notifications:</div><div class="exval"><code>null</code></div>
                   </div>`,
     summary_notifier: html`Name of notifiers to use for sending summary notifications. Can be:
                   <div class="extable">
@@ -2234,6 +2236,8 @@ let helpCommon = {
                        <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
                        <div>List of notifiers (YAML):</div><div class="exval"><pre>- telegram1\n- telegram2</code></pre></div>
                       <div>Template producing list of notifiers:</div><div class="exval"><code>{{ [ "tel1", "tel2" ] }}</code></div>
+                       <div>Truthy to summary notify using <code>notifier</code>:</div><div class="exval"><code>yes</code></div>
+                       <div>Falsey or null for no summary notifications:</div><div class="exval"><code>false</code></div>
                   </div>`,
     annotate_messages: html`If true, add extra context information to notifications, like number of times alert has fired since last notification. Can be:
                   <div class="extable">
