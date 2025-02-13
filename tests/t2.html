@@ -97,8 +97,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
-                 jassert(await startTest(doTest8));
+             if (1) {
+                 jassert(await startTest(doTest9));
                  return;
              }
              jassert(await startTest(doTest1));
@@ -109,6 +109,7 @@
              jassert(await startTest(doTest6));
              jassert(await startTest(doTest7));
              jassert(await startTest(doTest8));
+             jassert(await startTest(doTest9));
              let testStatusEl = document.querySelector('#testStatus');
              testStatusEl.innerHTML = `Test: All done`;
          });
@@ -201,7 +202,8 @@
              return data;
          }
          async function initTest(eName, extraParams) {
-             let cbMap = {};
+             let evCbMap = {};
+             let rezCbMap = {};
              let ws = new WebSocket('http://localhost:50005/api/websocket');
              ws.addEventListener('close', function(ev) {             console.log('ws got close', ev); });
              ws.addEventListener('error', function(ev) {             console.log('ws got error', ev); });
@@ -225,37 +227,55 @@
              let hmsg = function(ev) {
                  const msg = JSON.parse(ev.data);
                  console.log('got ws message inside subscribe: ', msg);
-                 if (cbMap['z'+msg.id]) {
+                 if (msg.type == 'result') {
+                     jasserteq(msg.success, true);
+                 }
+                 if (evCbMap['z'+msg.id]) {
                      jassert(msg.type == 'event' || msg.type == 'result');
                      if (msg.type == 'event') {
                          jasserteq(msg.type, 'event');
-                         cbMap['z'+msg.id](msg.event);
+                         evCbMap['z'+msg.id](msg.event);
                      }
                  }
-                 if (msg.type == 'result') {
-                     jasserteq(msg.success, true);
+                 if (rezCbMap['z'+msg.id]) {
+                     jasserteq(msg.type, 'result');
+                     rezCbMap['z'+msg.id](msg.result);
                  }
              }
              ws.addEventListener('message', hmsg);
 
              let connection = {
+                 sendMessagePromise: async function (mdata) {
+                     msgId += 1;
+                     let myId = msgId;
+                     mdata.id = myId;
+                     console.log(`ah, got call to sendMessagePromise. new id=${myId}. mdata=`, mdata);
+                     let rez = await (new Promise((resolve)=>{
+                         rezCbMap['z'+myId] = function (ev) {
+                             delete rezCbMap['z'+myId];
+                             resolve(ev);
+                         }
+                         ws.send(JSON.stringify(mdata));
+                     }));
+                     return rez;
+                 },
                  subscribeMessage: function (cb, mdata) {
                      msgId += 1;
                      let myId = msgId;
                      console.log(`ah, got call to subscribeMessage. new id=${myId}. mdata=`, mdata);
-                     cbMap['z'+myId] = cb;
+                     evCbMap['z'+myId] = cb;
                      let subDonePromise = new Promise((resolve)=>{
                          resolve( ()=>{
                              msgId += 1;
                              let myId2 = msgId;
                              console.log(`Got unsubscribe to id=${myId}. Sending unsub with id=${myId2}`);
-                             jassert(cbMap['z'+myId]);
-                             delete cbMap['z'+myId];
+                             jassert(evCbMap['z'+myId]);
+                             delete evCbMap['z'+myId];
                              ws.send(JSON.stringify({ type: 'unsubscribe_events', subscription: myId, id: myId2 }));
                          } );
                      });
                      mdata.id = myId;
-                     jasserteq(mdata.type, 'alert2_watch_display_msg');
+                     jassert(mdata.type == 'alert2_watch_display_msg' || mdata.type == 'alert2_watch_display_config');
                      ws.send(JSON.stringify(mdata));
                      return subDonePromise;
                  }
@@ -1472,7 +1492,133 @@
 
              z.ao.remove();
          }
-         
+         async function doTest9() {
+             let z = await initTest('alert2-overview');
+             let yamlCfg = { alerts: [
+                 { domain: 'd', name: 'n1', condition: 'off' },
+                 { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] }
+             ] };
+             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             
+             let alert2Tools = customElements.get('alert2-tools');
+             let dataReadyCbCount = 0;
+             let dc = new alert2Tools.DisplayConfigMonitor(() => { dataReadyCbCount += 1; });
+             jasserteq(dataReadyCbCount, 0);
+
+             // No display should be fine
+             dc.addConfigInfo([]);
+             jasserteq(dataReadyCbCount, 0);
+
+             // No hass yet
+             dinfos = [ { entityName: 'alert2.d_n1' } ];
+             dc.addConfigInfo(dinfos);
+             await sleepMs(10);
+             jasserteq(dataReadyCbCount, 0);
+
+             dinfos = [];
+             dc.addConfigInfo(dinfos);
+             await sleepMs(10);
+             jasserteq(dataReadyCbCount, 0);
+             
+             // hass, but still in startup
+             let hass = { states: {
+                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
+                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
+                 'binary_sensor.alert2 ha_startup_done': { state: 'off' },
+             },
+                          callApi: z.firstHass.callApi,
+                          callWs: z.firstHass.callWs,
+                          connection: z.firstHass.connection
+             };
+             dc.updateHass(hass);
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 0);
+             // startup done
+             hass = { states: {
+                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
+                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
+                 'binary_sensor.alert2 ha_startup_done': { state: 'on' },
+             },
+                          callApi: z.firstHass.callApi,
+                          callWs: z.firstHass.callWs,
+                          connection: z.firstHass.connection
+             };
+             dc.updateHass(hass);
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 0);
+             
+             dinfos = [ { entityName: 'alert2.d_n1' } ];
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1' } ] );
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 1);
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+
+             // Should be cached now, so response should be immediate
+             dinfos = [ { entityName: 'alert2.d_n1' } ];
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 1);
+
+             // Reload should clear the cache and refetch everything.
+             hass = { states: {
+                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
+                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
+                 'binary_sensor.alert2 ha_startup_done': { state: 'on' },
+             },
+                          callApi: z.firstHass.callApi,
+                          callWs: z.firstHass.callWs,
+                          connection: z.firstHass.connection
+             };
+             dc.updateHass(hass);
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 2);
+
+             // Fetch again should be immediate
+             dinfos = [ { entityName: 'alert2.d_n1' } ];
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 2);
+
+             // Fetch of n2 is new so won't be immediate
+             dinfos = [ { entityName: 'alert2.d_n1' }, { entityName:'alert2.d_n2'} ];
+             dc.addConfigInfo(dinfos);
+             jasserteq(dataReadyCbCount, 2);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
+                                    { entityName: 'alert2.d_n2' }
+             ] );
+             //    fetch happens, we get callback, and then next request has immediate results
+             await sleepMs(100);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
+                                    { entityName: 'alert2.d_n2' }
+             ] );
+             jasserteq(dataReadyCbCount, 3);
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [
+                 { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
+                 { entityName: 'alert2.d_n2', configInfo: { supersededByList: [ ] } },
+             ] );
+
+             // If a new entity is created, that results in update
+             fuck
+             
+             
+             
+             fuck;
+             tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             await sleepMs(200);
+             jasserteq(dataReadyCbCount, 0);
+
+
+             
+
+
+         }
         </script>
     </head>
     <body>

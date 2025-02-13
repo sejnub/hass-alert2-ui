@@ -7,7 +7,7 @@ const NOTIFICATION_SNOOZE = 'snooze'
 const VERSION = 'v1.9.1  (internal 47)';
 console.log(`alert2 ${VERSION}`);
 
-let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
+//let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
 function jFireEvent(elem, evName, params) {
     const event = new Event(evName, {
         bubbles: true,
@@ -29,6 +29,138 @@ function getEvValue(ev) {
     return ev.target.value;
 }
 
+// Adapted from https://stackoverflow.com/questions/996505/lru-cache-implementation-in-javascript
+class LRU {
+    constructor(max = 1000) {
+        this.max = max;
+        this.cache = new Map();
+    }
+    clear() { this.cache.clear(); }
+    get(key) {
+        let item = this.cache.get(key);
+        if (item !== undefined) {
+            // refresh key
+            this.cache.delete(key);
+            this.cache.set(key, item);
+        }
+        return item;
+    }
+    set(key, val) {
+        // refresh key
+        if (this.cache.has(key)) this.cache.delete(key);
+        // evict oldest
+        else if (this.cache.size === this.max) this.cache.delete(this.first());
+        this.cache.set(key, val);
+    }
+    first() {
+        return this.cache.keys().next().value;
+    }
+}
+
+//
+//
+//
+class DisplayConfigMonitor {
+    constructor(updateCb) {
+        this.hass = null;
+        this.cache = new LRU(100); // map from entityId -> display config info
+        // currCfgMap is so we know what we're currently showing, even if it's larger than the LRU cache
+        this.currCfgMap = {}; // entityId -> config info
+        this._updateCb = updateCb;
+        this._unsubFunc = null;
+        this.subscribeInProgress = false;
+    }
+    updateHass(newHass) {
+        let oldSensor = this.hass ? this.hass.states['binary_sensor.alert2 ha_startup_done'] : null;
+        let newSensor = newHass.states['binary_sensor.alert2 ha_startup_done'];
+        this.hass = newHass;
+        this.checkSubscription();
+        if (oldSensor !== newSensor && newSensor) {
+            console.log('DisplayConfigMonitor say startup or reload', newSensor.state);
+            if (newSensor.state == 'on') {  // ha startup done
+                this.sawUpdate({ configChange: true });
+            }
+        }
+    }
+    sawUpdate(ev) {
+        this.cache.clear();
+        for (const entId in this.currCfgMap) {
+            this.currCfgMap[entId] = null;
+        }
+        this.fetchMore(Object.keys(this.currCfgMap));
+    }
+    async checkSubscription() {
+        if (!this.hass) { return; }
+        if (!this._unsubFunc && !this.subscribeInProgress) {
+            this.subscribeInProgress = true;
+            try {
+                this._unsubFunc = await this.hass.connection.subscribeMessage(
+                    (ev) => this.sawUpdate(ev), { // ev is SchedulerEventData
+                        type: 'alert2_watch_display_config',
+                    });
+            } catch (err) {
+                console.error('DisplayValMonitor subscribe got error', err);
+                this.subscribeInProgress = false;
+                setTimeout(()=>{ this.checkSubscription(); }, 5000);
+                return;
+            }
+            this.subscribeInProgress = false;
+        }
+    }
+    async fetchMore(entityIdList) {
+        if (!this.hass) { return; }
+        let dn_list = [];
+        entityIdList.forEach((el)=> {
+            let ent = this.hass.states[el];
+            if (ent) {
+                dn_list.push({ domain: ent.attributes['domain'], name: ent.attributes['name'] });
+            }
+        });
+        if (dn_list.length > 0) {
+            let rez = await this.hass.connection.sendMessagePromise({
+                type: 'alert2_get_display_config',
+                dn_list: dn_list
+            });
+            console.log('fetchMore got ', rez);
+            let updatedMap = false;
+            rez.forEach((el)=>{
+                if (Object.hasOwn(this.currCfgMap, el.entityId)) {
+                    this.currCfgMap[el.entityId] = el.config;
+                    updatedMap = true;
+                }
+                this.cache.set(el.entityId, el.config);
+            });
+            if (updatedMap) {
+                this._updateCb();
+            }
+        }
+    }
+    addConfigInfo(entDispInfos) {
+        let fetchList = [];
+        let oldCfgMap = this.currCfgMap;
+        this.currCfgMap = {};
+        for (let idx = 0 ; idx < entDispInfos.length ; idx++) {
+            let entName = entDispInfos[idx].entityName;
+            let di = this.cache.get(entName);
+            if (di == undefined) {
+                if (oldCfgMap[entName]) {
+                    entDispInfos[idx].configInfo = oldCfgMap[entName];
+                    this.currCfgMap[entName] = oldCfgMap[entName];
+                    this.cache.set(entName, oldCfgMap[entName]);
+                } else {
+                    fetchList.push(entName);
+                    this.currCfgMap[entName] = null;
+                }
+            } else {
+                entDispInfos[idx].configInfo = di;
+                this.currCfgMap[entName] = di;
+            }
+        }
+        if (fetchList.length > 0) {
+            this.fetchMore(fetchList);
+        }
+    }
+}
 
 //
 // The purpose of DisplayValMonitor is to preserve the display_msg fields of entities shown
@@ -233,6 +365,8 @@ class Alert2Overview extends LitElement {
         this._updateIntervalFactor = 6;
 
         this._displayValMonitor = new DisplayValMonitor();
+        let aCb = ()=>{ this.resort(this._sortedDispInfos); }
+        this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -243,6 +377,7 @@ class Alert2Overview extends LitElement {
             });
         }
         this._displayValMonitor.updateHass(newHass);
+        this._displayConfigMonitor.updateHass(newHass);
         if (this._updateCooldown.timer) {
             this._updateCooldown.rerun = true;
             //console.log('set hass - deferring');
@@ -252,9 +387,9 @@ class Alert2Overview extends LitElement {
             this._updateCooldown.rerun = false;
             this._updateCooldown.timer = window.setTimeout(() => {
                 this._updateCooldown.timer = undefined;
-                if (this._updateCooldown.rerun) { queueMicrotask(()=> { this.jrefresh(false); }); }
+                if (this._updateCooldown.rerun) { setTimeout(()=> { this.jrefresh(false); }, 0); }
             }, this._updateCooldownMs);
-            queueMicrotask(()=> { this.jrefresh(false); });
+            setTimeout(()=> { this.jrefresh(false); }, 0);
         }
     }
     connectedCallback() {
@@ -600,6 +735,14 @@ class Alert2Overview extends LitElement {
             }
         }
 
+        // We have the list of entities, now get any cached display config info
+        // This will also start fetch of missing config infos. When that's done, it'll
+        // trigger a call to resort()
+        this._displayConfigMonitor.addConfigInfo(entDispInfos);
+
+        return resort(entDispInfos);
+    }
+    resort(entDispInfos) {
         // Now sort the entities. return negative if a should come before b
         let sortFunc = function(a, b) {
             if (a.isAcked != b.isAcked) {
@@ -611,7 +754,8 @@ class Alert2Overview extends LitElement {
             }
         }
         let doUpdate = false;
-        let sortedDispInfos = entDispInfos.sort(sortFunc);
+        // toSorted makes copy, which we need because we may have been called with entDispInfos===this._sortedDispInfos
+        let sortedDispInfos = entDispInfos.toSorted(sortFunc);
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
             doUpdate = true;
         } else {
@@ -636,6 +780,8 @@ class Alert2Overview extends LitElement {
         }
         return doUpdate;
     }
+
+    
 }
 
 // Similar to src/panels/lovelace/entity-rows/hui-climate-entity-row.ts
@@ -1674,6 +1820,7 @@ class Alert2Tools {
     static get html() { return html; }
     static set debounceMs(v) { gDebounceMs = v; }
     static get DisplayValMonitor() { return DisplayValMonitor; }
+    static get DisplayConfigMonitor() { return DisplayConfigMonitor; }
 };
 customElements.define('alert2-tools', Alert2Tools);
 
