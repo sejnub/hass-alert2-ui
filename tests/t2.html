@@ -1493,7 +1493,7 @@
              z.ao.remove();
          }
          async function doTest9() {
-             let z = await initTest('alert2-overview');
+             let z = await initTest('alert2-create');
              let yamlCfg = { alerts: [
                  { domain: 'd', name: 'n1', condition: 'off' },
                  { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] }
@@ -1603,21 +1603,17 @@
                  { entityName: 'alert2.d_n2', configInfo: { supersededByList: [ ] } },
              ] );
 
-             // If a new entity is created, that results in update
-             fuck
-             
-             
-             
-             fuck;
-             tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-             jassertObjeq(tobj, {});
-             await sleepMs(200);
-             jasserteq(dataReadyCbCount, 0);
+             // If a new entity is created, that results in update, which clears cache, does a refresh and
+             // then update
+             await z.setField('domain', 'd');
+             await z.setField('name', 'n3');
+             await z.setField('condition', 'off');
+             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
+             z.checkErr(null);
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 4);
 
-
-             
-
-
+             z.ao.remove();
          }
         </script>
     </head>
