@@ -124,6 +124,10 @@ class DisplayConfigMonitor {
             console.log('fetchMore got ', rez);
             let updatedMap = false;
             rez.forEach((el)=>{
+                // Convert config.supersededByList to config.supersededBySet
+                el.config.supersededBySet = new Set(el.config.supersededByList);
+                delete el.config.supersededByList;
+                
                 if (Object.hasOwn(this.currCfgMap, el.entityId)) {
                     this.currCfgMap[el.entityId] = el.config;
                     updatedMap = true;
@@ -735,15 +739,41 @@ class Alert2Overview extends LitElement {
                 }
             }
         }
-        return resort(entDispInfos);
+        return this.resort(entDispInfos);
     }
     resort(entDispInfos) {
+        let allIds = {}; // entId -> dispInfo
+        entDispInfos.forEach((el)=> { allIds[el.entityName] = el; });
+
+        // Want to group together superseded elements
+        //
+        // 1. Split ents into those that are superseded by another displayed ent and those ready to sort.
+        // 
+        let toPlace = new Set();
+        let readyToSort = new Set();
         // We have the list of entities, now get any cached display config info
         // This will also start fetch of missing config infos. When that's done, it'll
         // trigger a call to resort()
         this._displayConfigMonitor.addConfigInfo(entDispInfos);
-
-        // Now sort the entities. return negative if a should come before b
+        let readyToSortDispInfos = [];
+        entDispInfos.forEach((el)=> {
+            if (el.configInfo && el.configInfo.supersededBySet) {
+                // If el is superseded by an ent we're displaying and that is on, mark it
+                for (const anId of el.configInfo.supersededBySet) {
+                    if (Object.hasOwn(allIds, anId) && allIds[anId].isOn && !allIds[anId].isAcked) {
+                        toPlace.add(el.entityName);
+                        return;
+                    }
+                }
+            }
+            readyToSort.add(el.entityName);
+            readyToSortDispInfos.push(el);
+        });
+        
+        //
+        // 2. Sort the readyToSort entities
+        //
+        // sort func return negative if a should come before b
         let sortFunc = function(a, b) {
             if (a.isAcked != b.isAcked) {
                 return a.isAcked ? 1 : -1;
@@ -753,9 +783,46 @@ class Alert2Overview extends LitElement {
                 return b.testMs - a.testMs;
             }
         }
-        let doUpdate = false;
         // toSorted makes copy, which we need because we may have been called with entDispInfos===this._sortedDispInfos
-        let sortedDispInfos = entDispInfos.toSorted(sortFunc);
+        // TODO - toSorted no longer necessary
+        let sortedDispInfos = readyToSortDispInfos.toSorted(sortFunc);
+
+        //
+        // 3. Now place the remaining ents under element superseding it.
+        //
+        while (toPlace.size > 0) {
+            for (const candidateId of toPlace) {
+                let dispInfo = allIds[candidateId];
+                //console.log('considering placing', dispInfo.entityName);
+                for (const anId of dispInfo.configInfo.supersededBySet) {
+                    if (toPlace.has(anId)) {
+                        // candidate is supserseded by another element in toPlace, so skip it for now.
+                        //console.log('   entity is superseded by element yet to be placed: ', anId);
+                        break;
+                    }
+                }
+                // candidate is not superseded by anything in toPlace, so can place it.
+                let found = false;
+                //console.log('    will now place');
+                for (let idx = sortedDispInfos.length - 1 ; idx >= 0 ; idx--) {
+                    let tinfo = sortedDispInfos[idx];
+                    if (dispInfo.configInfo.supersededBySet.has(tinfo.entityName) && tinfo.isOn) {
+                        // insert it
+                        found = true;
+                        sortedDispInfos.splice(idx+1, 0, dispInfo);
+                        toPlace.delete(candidateId);
+                        break;
+                    }
+                }
+                jassert(found);
+                break;
+            }
+        }
+        // make sure we placed everything
+        jassert(sortedDispInfos.length >= 0 && Object.keys(allIds).length >= 0);
+        jasserteq(sortedDispInfos.length, Object.keys(allIds).length);
+        
+        let doUpdate = false;
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
             doUpdate = true;
         } else {
