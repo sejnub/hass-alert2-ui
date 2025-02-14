@@ -1550,16 +1550,16 @@
              
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1' } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 1);
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } } ] );
 
              // Should be cached now, so response should be immediate
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } } ] );
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 1);
 
@@ -1580,7 +1580,7 @@
              // Fetch again should be immediate
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } } ] );
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 2);
 
@@ -1588,18 +1588,18 @@
              dinfos = [ { entityName: 'alert2.d_n1' }, { entityName:'alert2.d_n2'} ];
              dc.addConfigInfo(dinfos);
              jasserteq(dataReadyCbCount, 2);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
-                                    { entityName: 'alert2.d_n2' }
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } },
+                                    { entityName: 'alert2.d_n2', configInfo: null }
              ] );
              //    fetch happens, we get callback, and then next request has immediate results
              await sleepMs(100);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
-                                    { entityName: 'alert2.d_n2' }
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } },
+                                    { entityName: 'alert2.d_n2', configInfo: null }
              ] );
              jasserteq(dataReadyCbCount, 3);
              dc.addConfigInfo(dinfos);
              jassertObjeq(dinfos, [
-                 { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ ['d','n2']] } },
+                 { entityName: 'alert2.d_n1', configInfo: { supersededByList: [ 'alert2.d_n2'] } },
                  { entityName: 'alert2.d_n2', configInfo: { supersededByList: [ ] } },
              ] );
 
@@ -1610,7 +1610,7 @@
              await z.setField('condition', 'off');
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(null);
-             await sleepMs(100);
+             await sleepMs(200);
              jasserteq(dataReadyCbCount, 4);
 
              z.ao.remove();

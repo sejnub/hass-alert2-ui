@@ -77,7 +77,7 @@ class DisplayConfigMonitor {
         this.checkSubscription();
         if (oldSensor !== newSensor && newSensor) {
             console.log('DisplayConfigMonitor say startup or reload', newSensor.state);
-            if (newSensor.state == 'on') {  // ha startup done
+            if (newSensor.state == 'on') {  // ha startup done, or reload
                 this.sawUpdate({ configChange: true });
             }
         }
@@ -150,6 +150,7 @@ class DisplayConfigMonitor {
                 } else {
                     fetchList.push(entName);
                     this.currCfgMap[entName] = null;
+                    entDispInfos[idx].configInfo = null;
                 }
             } else {
                 entDispInfos[idx].configInfo = di;
@@ -734,15 +735,14 @@ class Alert2Overview extends LitElement {
                 }
             }
         }
-
+        return resort(entDispInfos);
+    }
+    resort(entDispInfos) {
         // We have the list of entities, now get any cached display config info
         // This will also start fetch of missing config infos. When that's done, it'll
         // trigger a call to resort()
         this._displayConfigMonitor.addConfigInfo(entDispInfos);
 
-        return resort(entDispInfos);
-    }
-    resort(entDispInfos) {
         // Now sort the entities. return negative if a should come before b
         let sortFunc = function(a, b) {
             if (a.isAcked != b.isAcked) {
