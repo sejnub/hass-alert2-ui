@@ -61,7 +61,8 @@
         </style>
         <script>
          const connection = {
-             subscribeMessage: function (cb, mdata) { return new Promise((resolve)=>{ resolve( ()=>{} ); } ); }
+             subscribeMessage: function (cb, mdata) { return new Promise((resolve)=>{ resolve( ()=>{} ); } ); },
+             sendMessagePromise: async function (mdata) { return []; }
          };
 
          function waitForEvent(element, eventName) {
@@ -199,8 +200,8 @@
              newHass.states['alert2.foo'] = createState('foo', 100, 150);
              ao.hass = newHass;
              await sleepMs(10);
-             tEl = ao.shadowRoot.querySelector('div.jEvWrapper');
-             jassert(tEl.innerHTML.includes('alert2-entity-row'));
+             tEl = ao.shadowRoot.querySelector('hui-alert2-entity-row');
+             jassert(tEl);
 
              // 2nd alert will be delayed by throttling
              newHass = cloneHass(newHass);
@@ -255,7 +256,7 @@
              jassert(tEls[1].shadowRoot.innerHTML.includes('alert2.foo4'));
              jassert(tEls[2].shadowRoot.innerHTML.includes('alert2.foo6'));
              jassert(ao.shadowRoot.querySelector('div#ackbar') == null);
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 0);
 
              // Add in alerts that are off and unacked. They should be after the on ones.
@@ -274,7 +275,7 @@
              jassert(tEls[4].shadowRoot.innerHTML.includes('alert2.foo9'));
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
              jassert(ao.shadowRoot.querySelector('div#ackbar') == null);
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 0);
              
              // Add in some on alerts that are acked and on
@@ -297,7 +298,7 @@
              jassert(tEls[8].shadowRoot.innerHTML.includes('alert2.foo10'));
              let ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 3);
 
              // Add in some on alerts that are acked and off
@@ -323,7 +324,7 @@
              jassert(tEls[11].shadowRoot.innerHTML.includes('alert2.foo15'));
              ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 6);
 
              // For grins, let's try setting an alert to ack
@@ -334,7 +335,7 @@
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jasserteq(tEls.length, 12);
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 6);
              // Now try with ack time set, that should bump foo7 below ackbar
              newHass = cloneHass(newHass);
@@ -345,7 +346,7 @@
              jassert(tEls.length == 12);
              jassert(!tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
              jassert(tEls[11].shadowRoot.innerHTML.includes('alert2.foo7'));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 7);
              // And then unack should bring it back up
              newHass = cloneHass(newHass);
@@ -356,7 +357,7 @@
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jassert(tEls.length == 12);
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo7'));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 6);
          }
          async function doTest3(ao, newHass) {
@@ -387,7 +388,7 @@
              //jassert(noun.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
              let ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 2);
              //jassert(ao.shadowRoot.querySelector('div#ackbar') == null);
 
@@ -421,7 +422,7 @@
              jassert(tEls[4].shadowRoot.innerHTML.includes('alert2.foo20'));
              jassert(tEls[5].shadowRoot.innerHTML.includes('alert2.foo23'));
              jassert(tEls[6].shadowRoot.innerHTML.includes('alert2.foo24'));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 7);
          }
          async function doTest4(ao, newHass) {
@@ -558,7 +559,7 @@
              jassert(tEls.length == 2);
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo40'));
              jassert(tEls[1].shadowRoot.innerHTML.includes('alert2.foo41'));
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jassert(tEls.length == 1);
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo41'));
              let ackbar = ao.shadowRoot.querySelector('div#ackbar');
@@ -570,7 +571,7 @@
              await sleepMs(60);
              tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              jasserteq(tEls.length, 2);
-             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ div.jEvWrapper > hui-alert2-entity-row');
+             tEls = ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
              jasserteq(tEls.length, 2);
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo40'));
              ackbar = ao.shadowRoot.querySelector('div#ackbar');

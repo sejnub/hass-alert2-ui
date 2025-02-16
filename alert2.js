@@ -19,6 +19,12 @@ function jFireEvent(elem, evName, params) {
 }
 function showToast(elem, amsg) { jFireEvent(elem, "hass-notification", { message: amsg }); }
 
+function jassert(abool, ...args) {
+    if (!abool) {
+        console.error('assert failed', ...args);
+        throw new Error("assert failed");
+    }
+}
 // unused
 function getEvValue(ev) {
     //return ev.detail?.value || ev.target.value;
@@ -71,8 +77,8 @@ class DisplayConfigMonitor {
         this.subscribeInProgress = false;
     }
     updateHass(newHass) {
-        let oldSensor = this.hass ? this.hass.states['binary_sensor.alert2 ha_startup_done'] : null;
-        let newSensor = newHass.states['binary_sensor.alert2 ha_startup_done'];
+        let oldSensor = this.hass ? this.hass.states['binary_sensor.alert2_ha_startup_done'] : null;
+        let newSensor = newHass.states['binary_sensor.alert2_ha_startup_done'];
         this.hass = newHass;
         this.checkSubscription();
         if (oldSensor !== newSensor && newSensor) {
@@ -83,6 +89,7 @@ class DisplayConfigMonitor {
         }
     }
     sawUpdate(ev) {
+        console.log('sawUpdate, clearing all caches and refetching fetchMore');
         this.cache.clear();
         for (const entId in this.currCfgMap) {
             this.currCfgMap[entId] = null;
@@ -469,33 +476,24 @@ class Alert2Overview extends LitElement {
         if (this._sortedDispInfos.length == 0) {
             entListHtml = html`<div id="jempt">No alerts active in the past ${this._sliderValArr[this._sliderVal].str}. No alerts snoozed or disabled.</div>`;
         } else {
-            // entitiesConf can be just a list of string entity names, or it can be a list of configs. maybe both.
-            let entitiesConf = this._sortedDispInfos.map(obj=>({ entity: obj.entityName }));
-            for (let aconf of entitiesConf) {
-                if (aconf.entity.startsWith('alert2.')) {
+            const ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked && !el.isSuperseded);
+            entListHtml = [];
+            for (let idx = 0 ; idx < this._sortedDispInfos.length ; idx++) {
+                let dispInfo = this._sortedDispInfos[idx];
+                let entityConf = { entity: dispInfo.entityName };
+                if (dispInfo.entityName.startsWith('alert2.')) {
                     // 'custom:' gets stripped off in src/panels/lovelace/create-element/create-element-base.ts
-                    aconf.type = 'custom:hui-alert2-entity-row';
-                    // fire-dom-event causes ll-custom event to fire, if we're using hui-generic-entity-row, which we're not anymore.
-                    // This should have no effect.
-                    // aconf.tap_action = { action: "fire-dom-event" };
+                    entityConf.type = 'custom:hui-alert2-entity-row';
+                    // fire-dom-event causes ll-custom event to fire, if we're using hui-generic-entity-row,
+                    // which we're not anymore.
+                    // This should have no effect:
+                    //     aconf.tap_action = { action: "fire-dom-event" };
                 }
-            }
-
-            let ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked);
-            if (ackedIdx == 0) {
-                // Only acked alerts
-                //entListHtml = html`<div id="nounacks">No unacked alerts that haven't been snoozed or disabled</div>
-                //                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
-                entListHtml = html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>
-                                   ${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
-            } else if (ackedIdx == -1) {
-                // No acked alerts
-                entListHtml = html`${entitiesConf.map((entityConf) => this.renderEntity(entityConf) )}`;
-            } else {
-                // some acked and unacked
-                entListHtml = html`${entitiesConf.slice(0, ackedIdx).map((entityConf) => this.renderEntity(entityConf) )}
-                                   <div id="ackbar">---- Acked, snoozed or disabled ---</div>
-                                   ${entitiesConf.slice(ackedIdx).map((entityConf) => this.renderEntity(entityConf) )}`;
+                if (idx == ackedIdx) {
+                    entListHtml.push(html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>`);
+                }
+                console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded);
+                entListHtml.push(this.renderEntity(entityConf, dispInfo.isSuperseded));
             }
         }
         let manifestVersion = 'unknown';
@@ -524,12 +522,15 @@ class Alert2Overview extends LitElement {
           </ha-card>`;
         return foo;
     }
-    renderEntity(entityConf) {
+    renderEntity(entityConf, isSuperseded) {
         let entityName = entityConf.entity;
         const element = this._cardHelpers.createRowElement(entityConf);
         element.hass = this._hass;
+        element.classList.add('aRowElement');
         if (element instanceof Alert2EntityRow) {
             element.displayValMonitor = this._displayValMonitor;
+            element.isSuperseded = isSuperseded;
+            element.classList.add('superseded');
         }
         let outerThis = this;
         // hui-generic-entity-row calls handleAction on events, including clicks.
@@ -547,7 +548,8 @@ class Alert2Overview extends LitElement {
         //console.log('foo2', element);
         //console.log('ick', element.shadowRoot.querySelector('hui-generic-entity-row'));
         //return html`<div class="jEvWrapper" @click=${this.anev1} >${element}</div>`;
-        return html`<div class="jEvWrapper">${element}</div>`;
+        //return html`<div class="aRowElement">${element}</div>`;
+        return html`${element}`;
     }
     _alertClick(ev, element, entityName) {
         let stateObj = this._hass.states[entityName];
@@ -609,8 +611,11 @@ class Alert2Overview extends LitElement {
         margin-top: -16px;
         overflow: hidden;
       }
-      .jEvWrapper:not(:last-child) {
+      .aRowElement:not(:last-child) {
           margin-bottom: 1em;
+      }
+      hui-alert2-entity-row.superseded {
+          margin-top: -0.8em;  /* to counteract the aRowElement of the row above */
       }
       .tversions {
         font-size: 1rem;
@@ -741,7 +746,11 @@ class Alert2Overview extends LitElement {
         }
         return this.resort(entDispInfos);
     }
-    resort(entDispInfos) {
+    resort(tentDispInfos) {
+        // 2-level deep clone of object, so we can compare e.g. isAcked and isOn between old and new
+        let entDispInfos = [];
+        tentDispInfos.forEach((el)=> { entDispInfos.push(Object.assign({}, el)); });
+        
         let allIds = {}; // entId -> dispInfo
         entDispInfos.forEach((el)=> { allIds[el.entityName] = el; });
 
@@ -760,12 +769,14 @@ class Alert2Overview extends LitElement {
             if (el.configInfo && el.configInfo.supersededBySet) {
                 // If el is superseded by an ent we're displaying and that is on, mark it
                 for (const anId of el.configInfo.supersededBySet) {
-                    if (Object.hasOwn(allIds, anId) && allIds[anId].isOn && !allIds[anId].isAcked) {
+                    if (Object.hasOwn(allIds, anId) && allIds[anId].isOn) {
                         toPlace.add(el.entityName);
+                        el.isSuperseded = true;
                         return;
                     }
                 }
             }
+            el.isSuperseded = false;
             readyToSort.add(el.entityName);
             readyToSortDispInfos.push(el);
         });
@@ -783,8 +794,7 @@ class Alert2Overview extends LitElement {
                 return b.testMs - a.testMs;
             }
         }
-        // toSorted makes copy, which we need because we may have been called with entDispInfos===this._sortedDispInfos
-        // TODO - toSorted no longer necessary
+        // TODDO - copy of toSorted  here not necessary
         let sortedDispInfos = readyToSortDispInfos.toSorted(sortFunc);
 
         //
@@ -814,13 +824,13 @@ class Alert2Overview extends LitElement {
                         break;
                     }
                 }
-                jassert(found);
+                jassert(found, 'could not find where to place', candidateId);
                 break;
             }
         }
         // make sure we placed everything
-        jassert(sortedDispInfos.length >= 0 && Object.keys(allIds).length >= 0);
-        jasserteq(sortedDispInfos.length, Object.keys(allIds).length);
+        jassert(sortedDispInfos.length >= 0 && Object.keys(allIds).length >= 0, 'type error for', sortedDispInfos, Object.keys(allIds));
+        jassert(sortedDispInfos.length == Object.keys(allIds).length, 'not all supersedes were places', sortedDispInfos, allIds);
         
         let doUpdate = false;
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
@@ -835,7 +845,8 @@ class Alert2Overview extends LitElement {
                 }
                 if (newe.isOn != olde.isOn ||
                     newe.isAcked != olde.isAcked ||
-                    newe.testMs != newe.testMs) {
+                    newe.testMs != olde.testMs ||
+                    newe.isSuperseded != olde.isSuperseded) {
                     doUpdate = true;
                     break;
                 }
@@ -876,6 +887,9 @@ class Alert2EntityRow extends LitElement  {
     set displayValMonitor(ad) {
         this._displayValMonitor = ad;
     }
+    set isSuperseded(abool) {
+        this._isSuperseded = abool;
+    }
     constructor() {
         super();
         this._hass = null;
@@ -885,6 +899,7 @@ class Alert2EntityRow extends LitElement  {
         this.has_display_msg = false;
         this.display_change_cb = null;
         this._displayValMonitor = null;
+        this._isSuperseded = false;
     }
     setConfig(config) {
         if (!config || !config.entity) {
@@ -949,7 +964,7 @@ class Alert2EntityRow extends LitElement  {
         return html`
         <div class="mainrow">
             <div class="outhead">
-               <state-badge class="pointer" .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
+               <state-badge class=${this._isSuperseded ? "pointer superseded":"pointer"} .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
                <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
             </div>
             <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj} class="text-content value pointer astate"  @click=${this._rowClick} >
@@ -1013,6 +1028,9 @@ class Alert2EntityRow extends LitElement  {
          /*border: 1px solid green;*/
          /*margin-left: 22px;*/
          text-align: right;
+      }
+      state-badge.superseded {
+         visibility: hidden;
       }
     `;
 }
@@ -2574,6 +2592,12 @@ let helpCommon = {
                            <div class="exval"><code>telegram1</code><div class="bigor">or</div><code>"telegram1"</code></div>
                        <div>List of notifiers (YAML flow):</div><div class="exval"><code>[ telegram1, telegram2 ]</code></div>
                   </div>`,
+    supersedes: html`A list of domain+name pairs of alerts that this alert supersedes. Written using YAML flow syntax. Unloess you're quoting, the space after the colon is important. Can be:
+                  <div class="extable">
+                       <div>Single pair</div><div class="exval"><code>{ domain: test, name: foo }</code></div>
+                       <div>List of pairs</div><div class="exval"><code>[{ domain: test, name: foo },{ domain: test, name: foo2 }]</code></div>
+                       <div>Pair or list with quotes</div><div class="exval"><code>{domain: 'test', name: 'foo'}</code></div>
+                  </div>`,
     //: html`. Can be:
     //              <div class="extable">
     //                   <div></div><div><code></code></div>
@@ -3034,6 +3058,10 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.manual_off}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="supersedes" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.supersedes}</div></alert2-cfg-field>
 
             <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}

@@ -134,6 +134,7 @@ The order of displayed alerts is:
 
 For the purpose of ordering, alerts that are snoozed or disabled are treated as if acked.
 
+If alert A is superseded by another alert that's firing, alert A will appear in UI without a badge, directly below the alert that supersedes it.
 
 ### Detailed alert info
 
