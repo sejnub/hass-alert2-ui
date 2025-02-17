@@ -65,7 +65,7 @@ After upgrading Alert2 UI, it can take time for the browser or HA companion app 
 
 * On the Android HA companion app, try going to System Settings -> Apps -> Home Assistant -> Storage & cache and clicking "Clear cache".  Then in the HA app, click on the vertical dots at the top and click on "Reload resources".  You may need to wait a few seconds and click "Reload resources" twice.
 
-</details
+</details>
 
 After installing or upgrading, you can verify the Alert2 UI version you're running by clicking on the "Alerts" header of the Lovelace card:
 
