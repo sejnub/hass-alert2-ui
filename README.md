@@ -102,9 +102,9 @@ The install process above downloaded a js module, `alert2.js`.
     Lastly, if you installed Alert2 UI manually and configure dashboards via the UI, then enable "Advanced mode" in your user profile, then click on Settings -> Dashboards -> Resources.  "Resources" may appear only in the triple vertical dots on the upper right of the dashboards page. Click on "Add Resource" to add `alert2.js`.
 
 
-1. `alert2.js` defines two custom UI cards called `custom:alert2-overview` and `custom:alert2-manager`. If you configure dashboards via the UI, start editing a dashboard, then click on "Add Card" (or the "+" icon), then manually add a card of type `custom:alert2-overview`.
+1. `alert2.js` defines two custom UI cards called "Alert2 Overview" and "Alert2 Manager". If you configure dashboards via the UI, start editing a dashboard, then click on "Add Card" (or the "+" icon), then search for either card and click to add.
 
-    If you're using yaml to specify a dashboard, you can add the Alert2 overview card to your dashboard by adding it to the list of cards in a view, like (in bold):
+    If you're using yaml to specify a dashboard, you can add the Alert2 Overview and Alert2 Manager card to your dashboard by adding it to the list of cards in a view, like (in bold):
 
     <pre>views:
     - title: Monitoring
