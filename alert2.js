@@ -19,8 +19,10 @@ function jFireEvent(elem, evName, params) {
 }
 function showToast(elem, amsg) { jFireEvent(elem, "hass-notification", { message: amsg }); }
 
+let jassertFailCount = 0;
 function jassert(abool, ...args) {
     if (!abool) {
+        jassertFailCount += 1;
         console.error('assert failed', ...args);
         throw new Error("assert failed");
     }
@@ -132,7 +134,7 @@ class DisplayConfigMonitor {
                 type: 'alert2_get_display_config',
                 dn_list: dn_list
             });
-            console.log('fetchMore got ', rez);
+            //console.log('fetchMore got ', rez);
             let updatedMap = false;
             rez.forEach((el)=>{
                 // Convert config.supersededByList to config.supersededBySet
@@ -379,7 +381,7 @@ class Alert2Overview extends LitElement {
         //    look through entities and check dates/times.
         //
         this._alert2StatesMap = new Map(); // map entity_id -> state object
-        this._updateCooldown =  { timer: undefined, rerun: false };
+        this._updateCooldown =  { timer: undefined, rerunIsReload: undefined };
         this._updateCooldownMs = 1000;
         
         this._sliderVal = 3;// 4 hours
@@ -390,26 +392,34 @@ class Alert2Overview extends LitElement {
         this._displayValMonitor = new DisplayValMonitor();
         let aCb = (isReload) =>{
             if (isReload) {
-                this.slowedUpdate();
+                this.slowedUpdate(isReload);
             } else {
                 this.resort(this._sortedDispInfos);
             }
         }
         this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
     }
-    slowedUpdate() {
+    // Rate limit how often jrefresh is called.
+    // rerunIsReload can be in 3 states:
+    //    undefined mean no call to slowedUpdate during timer interval
+    //    false means slowedUpdate called during timer interval with isReload false
+    //    true means slowedUpdate called during timer interval with isReload true
+    slowedUpdate(isReload) {
         if (this._updateCooldown.timer) {
-            this._updateCooldown.rerun = true;
-            console.log('set hass - deferring');
+            this._updateCooldown.rerunIsReload = this._updateCooldown.rerunIsReload || isReload;
+            //console.log('set hass - deferring');
             return;
         } else {
             //console.log('set hass - doing lightRefresh', this._updateCooldownMs);
-            this._updateCooldown.rerun = false;
+            this._updateCooldown.rerunIsReload = undefined;
             this._updateCooldown.timer = window.setTimeout(() => {
                 this._updateCooldown.timer = undefined;
-                if (this._updateCooldown.rerun) { setTimeout(()=> { this.jrefresh(false); }, 0); }
+                let rerunIsReload = this._updateCooldown.rerunIsReload;
+                if (rerunIsReload !== undefined) {
+                    setTimeout(()=> { this.jrefresh(rerunIsReload); }, 0);
+                }
             }, this._updateCooldownMs);
-            setTimeout(()=> { this.jrefresh(false); }, 0);
+            setTimeout(()=> { this.jrefresh(isReload); }, 0);
         }
     }
     set hass(newHass) {
@@ -423,9 +433,7 @@ class Alert2Overview extends LitElement {
         this._displayValMonitor.updateHass(newHass);
         this._displayConfigMonitor.updateHass(newHass);
 
-        console.log('overview updating hass to:', Object.keys(newHass.states));
-
-        this.slowedUpdate();
+        this.slowedUpdate(false);
     }
     connectedCallback() {
         super.connectedCallback();
@@ -515,7 +523,7 @@ class Alert2Overview extends LitElement {
                 if (idx == ackedIdx) {
                     entListHtml.push(html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>`);
                 }
-                console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded, dispInfo);
+                //console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded, dispInfo);
                 entListHtml.push(this.renderEntity(entityConf, dispInfo));
             }
         }
@@ -554,7 +562,9 @@ class Alert2Overview extends LitElement {
             element.displayValMonitor = this._displayValMonitor;
             element.isSuperseded = dispInfo.isSuperseded;
             element.priority = getPriority(dispInfo);
-            element.classList.add('superseded');
+            if (dispInfo.isSuperseded) {
+                element.classList.add('superseded');
+            }
         }
         let outerThis = this;
         // hui-generic-entity-row calls handleAction on events, including clicks.
@@ -636,6 +646,9 @@ class Alert2Overview extends LitElement {
         margin-top: -16px;
         overflow: hidden;
       }
+      .aRowElement {
+          display: block;
+      }
       .aRowElement:not(:last-child) {
           margin-bottom: 1em;
       }
@@ -663,7 +676,8 @@ class Alert2Overview extends LitElement {
 
     // Returns true if changed list of entities.
     jrefresh(forceBigRefresh) {
-        console.log('doing jrefresh', forceBigRefresh);
+        //console.log('doing jrefresh', forceBigRefresh);
+        jassert(forceBigRefresh === true || forceBigRefresh === false);
         if (!this._hass) {
             console.log('  skipping jrefresh cuz no hass');
             return false;
@@ -698,7 +712,7 @@ class Alert2Overview extends LitElement {
             return;
         }
 
-        console.log('doing big refresh');
+        //console.log('doing big refresh');
         
         this._alert2StatesMap.clear();
         for (let entityName in this._hass.states) {
@@ -827,7 +841,7 @@ class Alert2Overview extends LitElement {
                 }
             }
         }
-        console.log('about to sort in render', JSON.stringify(readyToSortDispInfos));
+        //console.log('about to sort in render', JSON.stringify(readyToSortDispInfos));
         // TODDO - copy of toSorted  here not necessary
         let sortedDispInfos = readyToSortDispInfos.toSorted(sortFunc);
 

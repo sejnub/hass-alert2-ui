@@ -2,7 +2,7 @@
 <html lang="en">
     <!-- 
          Run server with (from the Alert2 repo):
-              JTESTDIR=/home/redstone/home-monitoring/homeassistant JTEST_JS_DIR=/home/redstone/tmp/hass-alert2-ui venv/bin/pytest tests/test_server.py
+              JTESTDIR=/home/redstone/home-monitoring/homeassistant JTEST_JS_DIR=/home/redstone/tmp/hass-alert2-ui venv/bin/pytest tests/dummy_server.py
          View page at:
              http://localhost:50005/jtest/tests/t2.html
          
@@ -97,8 +97,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
-                 jassert(await startTest(doTest10));
+             if (0) {
+                 jassert(await startTest(doTest9));
                  return;
              }
              jassert(await startTest(doTest1));
@@ -112,16 +112,18 @@
              jassert(await startTest(doTest9));
              jassert(await startTest(doTest10));
              let testStatusEl = document.querySelector('#testStatus');
-             testStatusEl.innerHTML = `Test: All done`;
+             if (jassertFailCount == 0) {
+                 testStatusEl.innerHTML = `Test: All done`;
+             } else {
+                 testStatusEl.innerHTML = `Test: Ended with errors`;
+             }
          });
-         //function jassert(abool) {
-         //    if (!abool) {
-         //        throw new Error("assert failed");
-         //    }
-         //}
+         // jassert and jassertFailCount are declared in alert2.js
          function jasserteq(a, b) {
              if (a !== b) {
+                 jassertFailCount += 1;
                  throw new Error(`assert failed "${a}" != "${b}"`);
+                 
              }
          }
          function testObjeq(obj1, obj2) {
@@ -1522,7 +1524,8 @@
              
              let alert2Tools = customElements.get('alert2-tools');
              let dataReadyCbCount = 0;
-             let dc = new alert2Tools.DisplayConfigMonitor(() => { dataReadyCbCount += 1; });
+             let dataReadyCbReloadCount = 0;
+             let dc = new alert2Tools.DisplayConfigMonitor((isReload) => { if (isReload) { dataReadyCbReloadCount += 1; } else { dataReadyCbCount += 1; }});
              jasserteq(dataReadyCbCount, 0);
 
              // No display should be fine
@@ -1534,11 +1537,13 @@
              dc.addConfigInfo(dinfos);
              await sleepMs(10);
              jasserteq(dataReadyCbCount, 0);
+             jasserteq(dataReadyCbReloadCount, 0);
 
              dinfos = [];
              dc.addConfigInfo(dinfos);
-             await sleepMs(10);
+             await sleepMs(200);
              jasserteq(dataReadyCbCount, 0);
+             jasserteq(dataReadyCbReloadCount, 0);
              
              // hass, but still in startup
              let hass = { states: {
@@ -1553,6 +1558,7 @@
              dc.updateHass(hass);
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 0);
+             jasserteq(dataReadyCbReloadCount, 0);
              // startup done
              hass = { states: {
                  'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
@@ -1566,19 +1572,21 @@
              dc.updateHass(hass);
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 0);
+             jasserteq(dataReadyCbReloadCount, 1);
              
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
              jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 1);
+             jasserteq(dataReadyCbReloadCount, 1);
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
 
              // Should be cached now, so response should be immediate
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 1);
 
@@ -1595,33 +1603,50 @@
              };
              dc.updateHass(hass);
              await sleepMs(100);
-             jasserteq(dataReadyCbCount, 2);
+             jasserteq(dataReadyCbCount, 1);
+             jasserteq(dataReadyCbReloadCount, 2);
 
-             // Fetch again should be immediate
+             // addConfigInfo again should trigger a new fetch
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } } ] );
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
+             jasserteq(dataReadyCbCount, 1);
+             jasserteq(dataReadyCbReloadCount, 2);
              await sleepMs(100);
              jasserteq(dataReadyCbCount, 2);
+             jasserteq(dataReadyCbReloadCount, 2);
+             
+             // Now should be immediate
+             dinfos = [ { entityName: 'alert2.d_n1' } ];
+             dc.addConfigInfo(dinfos);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 2);
+             jasserteq(dataReadyCbReloadCount, 2);
 
              // Fetch of n2 is new so won't be immediate
              dinfos = [ { entityName: 'alert2.d_n1' }, { entityName:'alert2.d_n2'} ];
              dc.addConfigInfo(dinfos);
              jasserteq(dataReadyCbCount, 2);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } },
+             jasserteq(dataReadyCbReloadCount, 2);
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
                                     { entityName: 'alert2.d_n2', configInfo: null }
              ] );
              //    fetch happens, we get callback, and then next request has immediate results
              await sleepMs(100);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } },
+             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
                                     { entityName: 'alert2.d_n2', configInfo: null }
              ] );
              jasserteq(dataReadyCbCount, 3);
+             jasserteq(dataReadyCbReloadCount, 2);
              dc.addConfigInfo(dinfos);
              jassertObjeq(dinfos, [
-                 { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']) } },
-                 { entityName: 'alert2.d_n2', configInfo: { supersededBySet: new Set([ ]) } },
+                 { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
+                 { entityName: 'alert2.d_n2', configInfo: { supersededBySet: new Set([ ]), priority: 'low' } },
              ] );
+             await sleepMs(100);
+             jasserteq(dataReadyCbCount, 3);
+             jasserteq(dataReadyCbReloadCount, 2);
 
              // If a new entity is created, that results in update, which clears cache, does a refresh and
              // then update
@@ -1631,7 +1656,8 @@
              await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
              z.checkErr(null);
              await sleepMs(200);
-             jasserteq(dataReadyCbCount, 4);
+             jasserteq(dataReadyCbCount, 3);
+             jasserteq(dataReadyCbReloadCount, 3);
 
              z.ao.remove();
          }
@@ -1698,47 +1724,38 @@
                                       createState('n3', 2000, 7000, 20000) ],
                                     ['n2', 'n3']);
 
-             console.log(' \n\n poke');
-             
              // supersedes works even if separated by one
              await createExperiment([ createState('n1', 1000, 7000, 20000),
                                       createState('n4', 2000, 7000, 20000) ],
                                     ['n4', 'n1']);
-             console.log(' \n\n poke');
              await createExperiment([ createState('n1', 2000, 7000, 20000),
                                       createState('n4', 1000, 7000, 20000) ],
                                     ['n4', 'n1']);
 
-             console.log(' \n\n poke');
              // supersedes doesn't apply to off alerts.  supersedes alert is off.
              await createExperiment([ createState('n1', 9000, 10000, 20000),
                                       createState('n2', 8000, 7000, 20000) ],
                                     ['n1', 'n2']);
-             console.log(' \n\n poke');
              // superseded alert is off
              await createExperiment([ createState('n1', 8000, 7000, 20000),
                                       createState('n2', 9000, 10000, 20000) ],
                                     ['n2', 'n1']);
 
-             console.log(' \n\n poke');
              await createExperiment([ createState('n4', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n1', 2000, 10000, 20000) ],
                                     ['n4', 'n2', 'n1']);
-             console.log(' \n\n poke');
 
              // n2 and n3 superseded n1.  n2 and n3 should be time ordered
              await createExperiment([ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n3', 2000, 10000, 20000) ],
                                     ['n3', 'n2', 'n1']);
-             console.log(' \n\n poke');
              await createExperiment([ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 2000, 10000, 20000),
                                       createState('n3', 3000, 10000, 20000) ],
                                     ['n2', 'n3', 'n1']);
 
-             console.log(' \n\n poke');
              // Supersedes applies to ack'd alerts
              await createExperiment([ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 4000) ],

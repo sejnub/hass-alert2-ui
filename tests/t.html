@@ -1,6 +1,11 @@
-<html>
-    <!-- python3 -m http.server 8000 -d ..
-         then load http://localhost:8000/tests/t.html
+<!DOCTYPE html>
+<html lang="en">
+    <!-- 
+         Run server with (from the Alert2 repo):
+              JTESTDIR=/home/redstone/home-monitoring/homeassistant JTEST_JS_DIR=/home/redstone/tmp/hass-alert2-ui venv/bin/pytest tests/dummy_server.py
+         View page at:
+             http://localhost:50005/jtest/tests/t.html
+         
     -->
     <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -102,7 +107,11 @@
              await startTest(doTest7, withAO=false);
              await startTest(doTest8);
              let testStatusEl = document.querySelector('#testStatus');
-             testStatusEl.innerHTML = `Test: All done`;
+             if (jassertFailCount == 0) {
+                 testStatusEl.innerHTML = `Test: All done`;
+             } else {
+                 testStatusEl.innerHTML = `Test: Ended with errors`;
+             }
          });
          function jassert(abool) {
              if (!abool) {
@@ -529,7 +538,7 @@
              newHass.states['alert2.foo39a'].attributes['last_ack_time'] = null;
              newHass.states['alert2.foo39a'].attributes['last_on_time'] = null;
              newHass.states['alert2.foo39a'].attributes['last_off_time'] = null;
-             newHass.states['alert2.foo39b'] = createState('foo39b', 5000, 6000, 10000);  // never turned off
+             newHass.states['alert2.foo39b'] = createState('foo39b', 5300, 6000, 10000);  // never turned off
              newHass.states['alert2.foo39b'].attributes['last_ack_time'] = null;
              newHass.states['alert2.foo39b'].attributes['last_off_time'] = null;
              newHass.states['alert2.foo39c'] = createEventState('foo39c', 5700, 10000); // event never fired
