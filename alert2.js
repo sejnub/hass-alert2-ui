@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.9.1  (internal 47)';
+const VERSION = 'v1.9.1  (internal 49)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -64,7 +64,8 @@ class LRU {
 }
 
 //
-//
+// updateCb called with isReload true or false indicating if it's a full reload, or just update to what
+// already we know of.
 //
 class DisplayConfigMonitor {
     constructor(updateCb) {
@@ -88,13 +89,16 @@ class DisplayConfigMonitor {
             }
         }
     }
+    // The only update type we support is that the config may have completely changed and needs
+    // to be reloaded from scratch. This happens either due to subscribed msg or from reload/startup.
     sawUpdate(ev) {
         console.log('sawUpdate, clearing all caches and refetching fetchMore');
         this.cache.clear();
         for (const entId in this.currCfgMap) {
             this.currCfgMap[entId] = null;
         }
-        this.fetchMore(Object.keys(this.currCfgMap));
+        // We'll let the cb figure out correct entity set and call addConfigInfo to trigger refresh
+        this._updateCb(true); // isReload=true
     }
     async checkSubscription() {
         if (!this.hass) { return; }
@@ -142,7 +146,7 @@ class DisplayConfigMonitor {
                 this.cache.set(el.entityId, el.config);
             });
             if (updatedMap) {
-                this._updateCb();
+                this._updateCb(false); // isReload=false
             }
         }
     }
@@ -328,6 +332,13 @@ class SingleDisplayValMonitor {
     }
 };
 
+function getPriority(dispInfo) {
+    if (dispInfo.configInfo) {
+        return dispInfo.configInfo.priority;
+    }
+    return 'low';
+}
+
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
     // https://lit.dev/docs/components/properties/
@@ -377,8 +388,29 @@ class Alert2Overview extends LitElement {
         this._updateIntervalFactor = 6;
 
         this._displayValMonitor = new DisplayValMonitor();
-        let aCb = ()=>{ this.resort(this._sortedDispInfos); }
+        let aCb = (isReload) =>{
+            if (isReload) {
+                this.slowedUpdate();
+            } else {
+                this.resort(this._sortedDispInfos);
+            }
+        }
         this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
+    }
+    slowedUpdate() {
+        if (this._updateCooldown.timer) {
+            this._updateCooldown.rerun = true;
+            console.log('set hass - deferring');
+            return;
+        } else {
+            //console.log('set hass - doing lightRefresh', this._updateCooldownMs);
+            this._updateCooldown.rerun = false;
+            this._updateCooldown.timer = window.setTimeout(() => {
+                this._updateCooldown.timer = undefined;
+                if (this._updateCooldown.rerun) { setTimeout(()=> { this.jrefresh(false); }, 0); }
+            }, this._updateCooldownMs);
+            setTimeout(()=> { this.jrefresh(false); }, 0);
+        }
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -390,19 +422,10 @@ class Alert2Overview extends LitElement {
         }
         this._displayValMonitor.updateHass(newHass);
         this._displayConfigMonitor.updateHass(newHass);
-        if (this._updateCooldown.timer) {
-            this._updateCooldown.rerun = true;
-            //console.log('set hass - deferring');
-            return;
-        } else {
-            //console.log('set hass - doing lightRefresh', this._updateCooldownMs);
-            this._updateCooldown.rerun = false;
-            this._updateCooldown.timer = window.setTimeout(() => {
-                this._updateCooldown.timer = undefined;
-                if (this._updateCooldown.rerun) { setTimeout(()=> { this.jrefresh(false); }, 0); }
-            }, this._updateCooldownMs);
-            setTimeout(()=> { this.jrefresh(false); }, 0);
-        }
+
+        console.log('overview updating hass to:', Object.keys(newHass.states));
+
+        this.slowedUpdate();
     }
     connectedCallback() {
         super.connectedCallback();
@@ -492,8 +515,8 @@ class Alert2Overview extends LitElement {
                 if (idx == ackedIdx) {
                     entListHtml.push(html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>`);
                 }
-                console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded);
-                entListHtml.push(this.renderEntity(entityConf, dispInfo.isSuperseded));
+                console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded, dispInfo);
+                entListHtml.push(this.renderEntity(entityConf, dispInfo));
             }
         }
         let manifestVersion = 'unknown';
@@ -522,14 +545,15 @@ class Alert2Overview extends LitElement {
           </ha-card>`;
         return foo;
     }
-    renderEntity(entityConf, isSuperseded) {
+    renderEntity(entityConf, dispInfo) {
         let entityName = entityConf.entity;
         const element = this._cardHelpers.createRowElement(entityConf);
         element.hass = this._hass;
         element.classList.add('aRowElement');
         if (element instanceof Alert2EntityRow) {
             element.displayValMonitor = this._displayValMonitor;
-            element.isSuperseded = isSuperseded;
+            element.isSuperseded = dispInfo.isSuperseded;
+            element.priority = getPriority(dispInfo);
             element.classList.add('superseded');
         }
         let outerThis = this;
@@ -563,7 +587,8 @@ class Alert2Overview extends LitElement {
         //let innerHtml = html`<more-info-alert2  dialogInitialFocus .entityId=${entityName} .hass=${this.hass} >
         //                     </more-info-alert2>`;
         let innerElem = document.createElement('more-info-alert2');
-        innerElem.entityId = entityName;
+        innerElem.stateObj = stateObj;
+        //innerElem.entityId = entityName;
         innerElem.setAttribute('dialogInitialFocus', '');
         innerElem.hass = this._hass;
         jCreateDialog(element, title, innerElem);
@@ -638,7 +663,7 @@ class Alert2Overview extends LitElement {
 
     // Returns true if changed list of entities.
     jrefresh(forceBigRefresh) {
-        //console.log('doing jrefresh', forceBigRefresh);
+        console.log('doing jrefresh', forceBigRefresh);
         if (!this._hass) {
             console.log('  skipping jrefresh cuz no hass');
             return false;
@@ -673,6 +698,8 @@ class Alert2Overview extends LitElement {
             return;
         }
 
+        console.log('doing big refresh');
+        
         this._alert2StatesMap.clear();
         for (let entityName in this._hass.states) {
             if (entityName.startsWith('alert.') ||
@@ -791,9 +818,16 @@ class Alert2Overview extends LitElement {
             } else if (a.isOn != b.isOn) {
                 return a.isOn ? -1 : 1;
             } else {
-                return b.testMs - a.testMs;
+                let aIdx = ['low', 'medium', 'high'].indexOf(getPriority(a));
+                let bIdx = ['low', 'medium', 'high'].indexOf(getPriority(b));
+                if (aIdx != bIdx) {
+                    return aIdx > bIdx ? -1 : 1;
+                } else {
+                    return b.testMs - a.testMs;
+                }
             }
         }
+        console.log('about to sort in render', JSON.stringify(readyToSortDispInfos));
         // TODDO - copy of toSorted  here not necessary
         let sortedDispInfos = readyToSortDispInfos.toSorted(sortFunc);
 
@@ -846,7 +880,9 @@ class Alert2Overview extends LitElement {
                 if (newe.isOn != olde.isOn ||
                     newe.isAcked != olde.isAcked ||
                     newe.testMs != olde.testMs ||
-                    newe.isSuperseded != olde.isSuperseded) {
+                    newe.isSuperseded != olde.isSuperseded ||
+                    newe.configInfo !== olde.configInfo
+                   ) {
                     doUpdate = true;
                     break;
                 }
@@ -890,6 +926,9 @@ class Alert2EntityRow extends LitElement  {
     set isSuperseded(abool) {
         this._isSuperseded = abool;
     }
+    set priority(apri) {
+        this._priority = apri;
+    }
     constructor() {
         super();
         this._hass = null;
@@ -900,6 +939,7 @@ class Alert2EntityRow extends LitElement  {
         this.display_change_cb = null;
         this._displayValMonitor = null;
         this._isSuperseded = false;
+        this._priority = 'low';
     }
     setConfig(config) {
         if (!config || !config.entity) {
@@ -939,9 +979,10 @@ class Alert2EntityRow extends LitElement  {
         }
         const stateObj = this._hass.states[this._config.entity];
         if (!stateObj) {
+            console.error('entity not found', this._config.entity);
             return html`
         <hui-warning>
-          ${createEntityNotFoundWarning(this._hass, this._config.entity)}
+          Entity not found in hass.states: ${this._config.entity}
         </hui-warning>
       `;
         }
@@ -961,10 +1002,15 @@ class Alert2EntityRow extends LitElement  {
         if (this.has_display_msg && this.display_msg !== null) {
             dispMsgHtml = html`<div class="dispMsg">${this.display_msg}</div>`;
         }
+        let stateClass = 'pointer';
+        if (this._isSuperseded) {  stateClass += ' superseded'; }
+        if (this._priority == 'low') {  stateClass += ' lowpri'; }
+        if (this._priority == 'medium') {  stateClass += ' mediumpri'; }
+        if (this._priority == 'high') {  stateClass += ' highpri'; }
         return html`
         <div class="mainrow">
             <div class="outhead">
-               <state-badge class=${this._isSuperseded ? "pointer superseded":"pointer"} .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
+               <state-badge class=${stateClass} .hass=${this._hass} .stateObj=${stateObj} @click=${this._rowClick} tabindex="0"></state-badge>
                <div class="info pointer text-content" title=${stateObj.entity_id} @click=${this._rowClick}  >${entHtml}</div>
             </div>
             <ha-alert2-state .hass=${this._hass} .stateObj=${stateObj} class="text-content value pointer astate"  @click=${this._rowClick} >
@@ -1032,6 +1078,9 @@ class Alert2EntityRow extends LitElement  {
       state-badge.superseded {
          visibility: hidden;
       }
+      state-badge.lowpri { }
+      state-badge.mediumpri { color: orange; }
+      state-badge.highpri { color: red; }
     `;
 }
 
@@ -1154,21 +1203,28 @@ class HaAlert2State extends LitElement {
         if (ent.attributes['last_on_time']) {
             last_on_time = Date.parse(ent.attributes['last_on_time']);
         }
-
         let last_fired_time = null;
-        if (last_on_time) {
+        if (Object.hasOwn(ent.attributes, 'last_on_time')) {
             last_fired_time = last_on_time;
             if (ent.state == 'on') {
                 //msg = 'on';
                 const last_on_time = Date.parse(ent.attributes['last_on_time']);
                 msg = html`on<j-relative-time .timestamp=${last_on_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
             } else if (ent.state == 'off') {
-                const last_off_time = Date.parse(ent.attributes['last_off_time']);
-                msg = html`off<j-relative-time .timestamp=${last_off_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
+                if (ent.attributes['last_off_time']) {
+                    const last_off_time = Date.parse(ent.attributes['last_off_time']);
+                    msg = html`off<j-relative-time .timestamp=${last_off_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
+                } else {
+                    msg = html`off`;
+                }
             } // else - should never happen, was checked when populated _shownEntities list.
         } else {
-            last_fired_time = Date.parse(ent.state);
-            msg = html`<j-relative-time .timestamp=${last_fired_time} .useLongnames=${false}></j-relative-time>`;
+            if (ent.state) {
+                last_fired_time = Date.parse(ent.state);
+                msg = html`<j-relative-time .timestamp=${last_fired_time} .useLongnames=${false}></j-relative-time>`;
+            } else {
+                msg = html`has never fired`;
+            }
         }
         let ackButton = ''
         if (last_ack_time && last_ack_time > last_fired_time) {
@@ -1315,8 +1371,10 @@ function strIsValidNumber(astr) {
 class MoreInfoAlert2 extends LitElement {
     static properties = {
         hass: { attribute: false },
-        //stateObj: { },
-        entityId: { attribute: false },
+        stateObj: { attribute: false },
+        entry: { attribute: false }, // from ha-more-info-info. unused at present
+        editMode: { attribute: false }, // from ha-more-info-info. unused at present
+        
         _requestInProgress: {state: true},
         _ackInProgress: {state: true},
         _currValue: {state: true},
@@ -1324,18 +1382,22 @@ class MoreInfoAlert2 extends LitElement {
     }
     // I don't think anything sets hass on MoreInfoAlert2 and so this code will never run after init
     shouldUpdate(changedProps) {
-        //console.log('MoreInfoAlert2  shouldUpdate: ', changedProps);
-        if (changedProps.has('hass')) {
-            const oldHass = changedProps.get("hass");
-            if (!oldHass) { return true; }
-            const newHass = this.hass;
-            const oldState = oldHass.states[this.entityId];
-            const newState = newHass.states[this.entityId];
-            let changed = oldState !== newState;
-            if (changed) {
-                //console.log('    MoreInfoAlert2 state changed: ', oldState, newState);
+        //console.log('MoreInfoAlert2  shouldUpdate: ', changedProps.size);
+        if (changedProps.has('stateObj') && this._currValue === undefined) {
+            const stateObj = changedProps.get('stateObj');
+            if (stateObj) {
+                this._currValue = stateObj.attributes.notification_control;
             }
-            return changed;
+        }
+        if (changedProps.size > 1) { return true; }
+        if (changedProps.has('hass')) {
+            const oldHass = this.hass;
+            const newHass = changedProps.get("hass");
+            if (!oldHass || !newHass || !this.stateObj) { return true; }
+            const entityId = this.stateObj.entity_id;
+            const oldState = oldHass.states[entityId];
+            const newState = newHass.states[entityId];
+            return oldState !== newState;
         }
         return true;
     }
@@ -1343,7 +1405,7 @@ class MoreInfoAlert2 extends LitElement {
         super();
         this._requestInProgress = false;
         this._ackInProgress = false;
-        this._currValue = NOTIFICATIONS_ENABLED;
+        this._currValue = undefined;
         this.textEl = null;
         this._historyArr = null;
         this._historyStartDate = null;
@@ -1360,8 +1422,6 @@ class MoreInfoAlert2 extends LitElement {
         super.firstUpdated();
         // see https://lit.dev/docs/v1/components/lifecycle/#firstupdated
         // could use connectedCallback to do this earlier
-        let stateObj = this.hass.states[this.entityId];
-        this._currValue = stateObj.attributes.notification_control;
         let s1 = this.shadowRoot.querySelector('ha-formfield#for-snooze ha-textfield');
         this.textEl = s1;
         this.textEl.validityTransform = (newValue, nativeValidity) => {
@@ -1396,7 +1456,7 @@ class MoreInfoAlert2 extends LitElement {
     }
     getHistory() {
         console.log('will getHistory from', this._historyStartDate);
-        let stateObj = this.hass.states[this.entityId];
+        let stateObj = this.stateObj;
         let historyUrl = `history/period/${this._historyStartDate.toISOString()}?filter_entity_id=${stateObj.entity_id}`;
         if (this._historyEndDate) {
             historyUrl += `&end_time=${this._historyEndDate.toISOString()}`;
@@ -1443,10 +1503,10 @@ class MoreInfoAlert2 extends LitElement {
     }
     
     render() {
-        if (!this.hass) {
-            return "";
+        if (!this.hass || !this.stateObj) {
+            return html`waiting for hass and stateObj to be defined`;
         }
-        let stateObj = this.hass.states[this.entityId];
+        let stateObj = this.stateObj;
         let stateValue = stateObj.attributes.notification_control;
         let notification_status;
         if (stateValue == null) {
@@ -1658,7 +1718,7 @@ class MoreInfoAlert2 extends LitElement {
             var newDate = new Date((new Date()).getTime() + hours*60*60*1000);
             data.snooze_until = newDate;
         }
-        let stateObj = this.hass.states[this.entityId];
+        let stateObj = this.stateObj;
         try {
             await this.hass.callWS({
                 type: "execute_script",
@@ -1682,7 +1742,7 @@ class MoreInfoAlert2 extends LitElement {
         this._ackInProgress = true;
         let abutton = ev.target;
         ev.stopPropagation();
-        let stateObj = this.hass.states[this.entityId];
+        let stateObj = this.stateObj;
         try {
             await this.hass.callWS({
                 type: "execute_script",
@@ -1754,6 +1814,12 @@ class MoreInfoAlert2Container extends LitElement {
         if (this.config) {
             this.config.innerElem.hass = nhass;
         }
+    }
+    set stateObj(nobj) {
+        if (this.config) { this.config.innerElem.stateObj = stateObj; }
+    }
+    set entry(nobj) {
+        if (this.config) { this.config.innerElem.entry = entry; }
     }
     setConfig(config) {
         this.config = config;
@@ -2485,6 +2551,11 @@ let helpCommon = {
                           <div>List of [int, float]</div><div class="exval"><code>[3, 5.2]</code></div>
                           <div>Null to disable throttling</div><div class="exval"><code>null</code></div>
                   </div>`,
+    priority: html`A value: low, medium or high. Affects display of alert in Alert2 Overview card. Can be:
+                  <div class="extable">
+                          <div>Low, medium or high</div><div class="exval"><code>low</code></div>
+                  </div>`,
+    
     domain: html`Alert entity name is alert2.[domain]_[name]. Can be:
                   <div class="extable">
                        <div>Letters, numbers, underscore</div><div class="exval"><code>test_domain</code></div>
@@ -2758,6 +2829,11 @@ class Alert2EditDefaults extends LitElement {
                   @expand-click=${this.expandClick}
                  .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
                <div slot="help">${helpCommon.throttle_fires_per_mins}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="priority" type=${FieldTypes.STR}
+                 .defaultP=${this._topConfigs.rawYaml.defaults}
+                  @expand-click=${this.expandClick}
+                 .savedP=${this._topConfigs.origRawUi.defaults}  .currP=${this._topConfigs.rawUi.defaults} >
+               <div slot="help">${helpCommon.priority}</div></alert2-cfg-field>
 
             <h3>Top-level options</h3>
             <alert2-cfg-field .hass=${this.hass} name="skip_internal_errors" type=${FieldTypes.BOOL}
@@ -2933,13 +3009,13 @@ class Alert2Create extends LitElement {
                 if (['domain','name', 'friendly_name', 'condition', 'condition_on', 'condition_off', 'message',
                      'title', 'target',
                      'annotate_messages', 'early_start', 'generator_name', 'manual_on', 'manual_off',
-                     'done_message', 'display_msg', 'delay_on_secs'].includes(fname)) {
+                     'done_message', 'display_msg', 'delay_on_secs', 'priority'].includes(fname)) {
                     val = yamlEscape(rawVal);
                 } else if (['trigger', 'trigger_on', 'trigger_off', 'data', 'throttle_fires_per_mins',
                             'reminder_frequency_mins',
                             ].includes(fname)) {
                     val = rawVal;
-                } else if (['generator', 'notifier', 'summary_notifier'].includes(fname)) {
+                } else if (['generator', 'notifier', 'summary_notifier', 'supersedes'].includes(fname)) {
                     if (hasJinjaTempl(rawVal)) {
                         val = yamlEscape(rawVal);
                     } else {
@@ -3062,6 +3138,10 @@ class Alert2Create extends LitElement {
                  @expand-click=${this.expandClick} @change=${this._change}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.supersedes}</div></alert2-cfg-field>
+            <alert2-cfg-field .hass=${this.hass} name="priority" type=${FieldTypes.STR}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                  .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
+               <div slot="help">${helpCommon.priority}</div></alert2-cfg-field>
 
             <h3>Notifications</h3>
             <alert2-cfg-field .hass=${this.hass} name="message" type=${FieldTypes.TEMPLATE}
@@ -3175,3 +3255,21 @@ customElements.define('alert2-manager', Alert2Manager);
 customElements.define('alert2-create', Alert2Create);
 customElements.define('alert2-edit-defaults', Alert2EditDefaults);
 customElements.define('alert2-cfg-field', Alert2CfgField);
+
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "alert2-manager",
+  name: "Alert2 Manager",
+  preview: false, // Optional - defaults to false
+  description: "Adjust Alert2 defaults and create and edit alerts",
+  documentationURL:
+    "https://github.com/redstone99/hass-alert2-ui",
+});
+window.customCards.push({
+  type: "alert2-overview",
+  name: "Alert2 Overview",
+  preview: false, // Optional - defaults to false
+  description: "View recently active Alert2 alerts",
+  documentationURL:
+    "https://github.com/redstone99/hass-alert2-ui",
+});

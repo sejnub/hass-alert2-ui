@@ -97,7 +97,7 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
+             if (1) {
                  jassert(await startTest(doTest10));
                  return;
              }
@@ -1642,6 +1642,7 @@
                  { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
                  { domain: 'd', name: 'n3', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
                  { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ] },
+                 { domain: 'd', name: 'n5', condition: 'off', priority: 'medium' },
              ] };
              let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              jassertObjeq(tobj, {});
@@ -1669,6 +1670,18 @@
                  jasserteq(tEls.length, nBelow);
              }
 
+             // n5 is higher priority so should be above if on
+             await createExperiment([ createState('n1', 1000, 7000, 20000),
+                                      createState('n5', 5000, 7000, 20000) ],
+                                    ['n5', 'n1']);
+             let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             let stateBadge = tEls[0].shadowRoot.querySelector('state-badge');
+             jassert(stateBadge.classList.contains('mediumpri'));
+             stateBadge = tEls[1].shadowRoot.querySelector('state-badge');
+             jassert(stateBadge.classList.contains('lowpri'));
+             
+
+             
              // n2 supersedes n1 so should be below
              await createExperiment([ createState('n1', 1000, 7000, 20000),
                                       createState('n2', 2000, 7000, 20000) ],
@@ -1685,38 +1698,47 @@
                                       createState('n3', 2000, 7000, 20000) ],
                                     ['n2', 'n3']);
 
+             console.log(' \n\n poke');
+             
              // supersedes works even if separated by one
              await createExperiment([ createState('n1', 1000, 7000, 20000),
                                       createState('n4', 2000, 7000, 20000) ],
                                     ['n4', 'n1']);
+             console.log(' \n\n poke');
              await createExperiment([ createState('n1', 2000, 7000, 20000),
                                       createState('n4', 1000, 7000, 20000) ],
                                     ['n4', 'n1']);
 
+             console.log(' \n\n poke');
              // supersedes doesn't apply to off alerts.  supersedes alert is off.
              await createExperiment([ createState('n1', 9000, 10000, 20000),
                                       createState('n2', 8000, 7000, 20000) ],
                                     ['n1', 'n2']);
+             console.log(' \n\n poke');
              // superseded alert is off
              await createExperiment([ createState('n1', 8000, 7000, 20000),
                                       createState('n2', 9000, 10000, 20000) ],
                                     ['n2', 'n1']);
 
+             console.log(' \n\n poke');
              await createExperiment([ createState('n4', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n1', 2000, 10000, 20000) ],
                                     ['n4', 'n2', 'n1']);
+             console.log(' \n\n poke');
 
              // n2 and n3 superseded n1.  n2 and n3 should be time ordered
              await createExperiment([ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n3', 2000, 10000, 20000) ],
                                     ['n3', 'n2', 'n1']);
+             console.log(' \n\n poke');
              await createExperiment([ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 2000, 10000, 20000),
                                       createState('n3', 3000, 10000, 20000) ],
                                     ['n2', 'n3', 'n1']);
 
+             console.log(' \n\n poke');
              // Supersedes applies to ack'd alerts
              await createExperiment([ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 4000) ],
