@@ -1536,6 +1536,8 @@ class MoreInfoAlert2 extends LitElement {
         let is_snoozed = false;
         if (this._currValue == NOTIFICATIONS_ENABLED ||
             this._currValue == NOTIFICATIONS_DISABLED) {
+        } else if (this._currValue === undefined) {
+            // let is_snoozed stay false.  Will update once stateObj exists
         } else {
             is_snoozed = true;
         }
@@ -1714,6 +1716,12 @@ class MoreInfoAlert2 extends LitElement {
         this._requestInProgress = true;
         let abutton = ev.target;
         let data = { };
+        if (this._currValue === undefined) {
+            this._requestInProgress = false;
+            abutton.actionError();
+            showToast(this, "error: entity state not defiend yet");
+            return;
+        }
         if (this._currValue == NOTIFICATIONS_ENABLED) {
             data.enable = 'on';
         } else if (this._currValue == NOTIFICATIONS_DISABLED) {
