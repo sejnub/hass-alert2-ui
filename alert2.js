@@ -2417,7 +2417,7 @@ class Alert2CfgField extends LitElement {
             } else if (this.type == FieldTypes.BOOL) {
             } else if (this.type == FieldTypes.TEMPLATE) {
                 if (this.name == 'generator') {
-                    if (this.renderInfo.result !== undefined) {
+                    if (this.renderInfo.result !== undefined && this.renderInfo.result !== null) {
                         let firstOnly = '';
                         if (this.renderInfo.result.len > this.renderInfo.result.list.length) {
                             firstOnly = `, showing first ${this.renderInfo.result.list.length}`;
@@ -2654,6 +2654,7 @@ let helpCommon = {
                   <div class="extable">
                        <div>String</div><div class="exval"><code>Temperature low</code><div class="bigor">or</div><code>"Temperature low"</code></div>
                        <div>Template</div><div class="exval"><code>Temperature is {{ states('sensor.temp') }}</code></div>
+                       <div>To reset inherited value</div><div class="exval"><code>null</code></div>
                   </div>`,
     title: html`Passed as the <code>title</code> parameter to the notify service call. Can be:
                   <div class="extable">
