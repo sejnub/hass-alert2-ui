@@ -98,7 +98,7 @@
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
              if (0) {
-                 jassert(await startTest(doTestCreate));
+                 jassert(await startTest(doTestConfig));
                  return;
              }
              jassert(await startTest(doTestDefaults));
@@ -111,6 +111,7 @@
              jassert(await startTest(doTest8));
              jassert(await startTest(doTest9));
              jassert(await startTest(doTest10));
+             jassert(await startTest(doTestConfig));
              let testStatusEl = document.querySelector('#testStatus');
              if (jassertFailCount == 0) {
                  testStatusEl.innerHTML = `Test: All done`;
@@ -176,6 +177,28 @@
                       },
                       entity_id: 'alert2.d_'+name };
          }
+         async function createExperiment(z, stateList, nodeList, nBelow=0) {
+             let hass = { states: {
+                 'binary_sensor.alert2_ha_startup_done': { state: 'on', attributes: { manifest_version: 'v.a.b.c' } },
+             },
+                          callApi: z.firstHass.callApi,
+                          callWs: z.firstHass.callWs,
+                          connection: z.firstHass.connection
+             };
+             for (const astate of stateList) {
+                 hass.states['alert2.'+astate.attributes.domain+'_'+astate.attributes.name] = astate;
+             }
+             console.log('createExperiment with', hass);
+             z.ao.hass = hass;
+             await sleepMs(1200);
+             let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             jasserteq(tEls.length, nodeList.length);
+             for (let idx = 0 ; idx < nodeList.length ; idx++) {
+                 jassert(tEls[idx].shadowRoot.innerHTML.includes(nodeList[idx]));
+             }
+             tEls = z.ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
+             jasserteq(tEls.length, nBelow);
+         }
          function createEventState(name, fireAgoMs, ackAgoMs=200) {
              return { state: getRecentIso(fireAgoMs),
                       attributes: { 'notification_control': NOTIFICATIONS_ENABLED,
@@ -212,7 +235,7 @@
              }
              return data;
          }
-         async function initTest(eName, extraParams) {
+         async function initTest(eName, extraParams, config=null) {
              let evCbMap = {};
              let rezCbMap = {};
              let ws = new WebSocket('http://localhost:50005/api/websocket');
@@ -313,6 +336,9 @@
              ao.hass = newHass;
              if (extraParams) {
                  Object.assign(ao, extraParams);
+             }
+             if (config) {
+                 ao.setConfig(config);
              }
              if (eName == 'alert2-create') {
                  ao.didSomethingCb = ()=>{
@@ -1705,31 +1731,9 @@
              let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              jassertObjeq(tobj, {});
              
-             async function createExperiment(stateList, nodeList, nBelow=0) {
-                 let hass = { states: {
-                     'binary_sensor.alert2_ha_startup_done': { state: 'on', attributes: { manifest_version: 'v.a.b.c' } },
-                 },
-                              callApi: z.firstHass.callApi,
-                              callWs: z.firstHass.callWs,
-                              connection: z.firstHass.connection
-                 };
-                 for (const astate of stateList) {
-                     hass.states['alert2.'+astate.attributes.domain+'_'+astate.attributes.name] = astate;
-                 }
-                 console.log('createExperiment with', hass);
-                 z.ao.hass = hass;
-                 await sleepMs(1200);
-                 let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
-                 jasserteq(tEls.length, nodeList.length);
-                 for (let idx = 0 ; idx < nodeList.length ; idx++) {
-                     jassert(tEls[idx].shadowRoot.innerHTML.includes(nodeList[idx]));
-                 }
-                 tEls = z.ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
-                 jasserteq(tEls.length, nBelow);
-             }
 
              // n5 is higher priority so should be above if on
-             await createExperiment([ createState('n1', 1000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
                                       createState('n5', 5000, 7000, 20000) ],
                                     ['n5', 'n1']);
              let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
@@ -1741,65 +1745,101 @@
 
              
              // n2 supersedes n1 so should be below
-             await createExperiment([ createState('n1', 1000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
                                       createState('n2', 2000, 7000, 20000) ],
                                     ['n2', 'n1']);
              // same with n3, even with "on" time ordering reversed
-             await createExperiment([ createState('n1', 2000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
                                       createState('n3', 1000, 7000, 20000) ],
                                     ['n3', 'n1']);
              // n2 and n3 don't supersede each other, so should be time ordered.
-             await createExperiment([ createState('n2', 2000, 7000, 20000),
+             await createExperiment(z, [ createState('n2', 2000, 7000, 20000),
                                       createState('n3', 1000, 7000, 20000) ],
                                     ['n3', 'n2']);
-             await createExperiment([ createState('n2', 1000, 7000, 20000),
+             await createExperiment(z, [ createState('n2', 1000, 7000, 20000),
                                       createState('n3', 2000, 7000, 20000) ],
                                     ['n2', 'n3']);
 
              // supersedes works even if separated by one
-             await createExperiment([ createState('n1', 1000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
                                       createState('n4', 2000, 7000, 20000) ],
                                     ['n4', 'n1']);
-             await createExperiment([ createState('n1', 2000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
                                       createState('n4', 1000, 7000, 20000) ],
                                     ['n4', 'n1']);
 
              // supersedes doesn't apply to off alerts.  supersedes alert is off.
-             await createExperiment([ createState('n1', 9000, 10000, 20000),
+             await createExperiment(z, [ createState('n1', 9000, 10000, 20000),
                                       createState('n2', 8000, 7000, 20000) ],
                                     ['n1', 'n2']);
              // superseded alert is off
-             await createExperiment([ createState('n1', 8000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
                                       createState('n2', 9000, 10000, 20000) ],
                                     ['n2', 'n1']);
 
-             await createExperiment([ createState('n4', 1000, 10000, 20000),
+             await createExperiment(z, [ createState('n4', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n1', 2000, 10000, 20000) ],
                                     ['n4', 'n2', 'n1']);
 
              // n2 and n3 superseded n1.  n2 and n3 should be time ordered
-             await createExperiment([ createState('n1', 1000, 10000, 20000),
+             await createExperiment(z, [ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 3000, 10000, 20000),
                                       createState('n3', 2000, 10000, 20000) ],
                                     ['n3', 'n2', 'n1']);
-             await createExperiment([ createState('n1', 1000, 10000, 20000),
+             await createExperiment(z, [ createState('n1', 1000, 10000, 20000),
                                       createState('n2', 2000, 10000, 20000),
                                       createState('n3', 3000, 10000, 20000) ],
                                     ['n2', 'n3', 'n1']);
 
              // Supersedes applies to ack'd alerts
-             await createExperiment([ createState('n1', 3000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 4000) ],
                                     ['n2', 'n1'], nBelow=2);
-             await createExperiment([ createState('n1', 3000, 7000, 2000),
+             await createExperiment(z, [ createState('n1', 3000, 7000, 2000),
                                       createState('n2', 5000, 7000, 20000) ],
                                     ['n2', 'n1'], nBelow=0);
-             await createExperiment([ createState('n1', 3000, 7000, 20000),
+             await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 20000) ],
                                     ['n2', 'n1']);
              
              z.ao.remove();
+         }
+         async function doTestConfig() {
+             let z = await initTest('alert2-overview', {}, null);
+             let yamlCfg = { alerts: [
+             ] };
+             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             jassertObjeq(tobj, {});
+             
+             const hrAgoMs = 60 * 60 * 1000;
+             // n2 off and unacked, but outside interval
+             await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                    ['n1']);
+             jasserteq(z.ao.shadowRoot.querySelector('h1').textContent.trim(), 'Alerts');
+
+             z.ao.remove();
+             z = await initTest('alert2-overview', {}, { title: 'yay', include_old_unacked: 'true' });
+             // n2 off and unacked, but outside interval but config set to include
+             await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                    ['n1', 'n2']);
+             jasserteq(z.ao.shadowRoot.querySelector('h1').textContent.trim(), 'yay');
+
+             z.ao.remove();
+             z = await initTest('alert2-overview', {}, { include_old_unacked: 'true', filter_entity_id: '*n2' });
+             // Try filter
+             await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                    ['n2']);
+
+             z.ao.remove();
+             z = await initTest('alert2-overview', {}, { include_old_unacked: 'true', filter_entity_id: '/n1/' });
+             // Try filter with regex
+             await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                    ['n1']);
          }
         </script>
     </head>

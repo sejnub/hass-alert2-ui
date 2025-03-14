@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.10.1  (internal 51)';
+const VERSION = 'v1.10.3  (internal 52)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -340,6 +340,14 @@ function getPriority(dispInfo) {
     }
     return 'low';
 }
+function isTruthy(aval) {
+    if (typeof aval == 'boolean') { return aval; }
+    if (typeof aval == 'number') { return aval > 0; }
+    if (typeof aval == 'string') {
+        return ['yes','on','true', '1'].includes(aval.toLowerCase());
+    }
+    return false;
+}
 
 // A custom card that lists alerts that have fired recently
 class Alert2Overview extends LitElement {
@@ -347,6 +355,7 @@ class Alert2Overview extends LitElement {
     // has good description of reactive properties
     static properties = {
         _config: {state: true},
+        _configError: {state: true},
         _sortedDispInfos: {state: true},
         _cardHelpers: {state: true},
         _ackAllInProgress: {state: true},
@@ -360,6 +369,7 @@ class Alert2Overview extends LitElement {
         this._cardHelpers = null;
         this._ackAllInProgress = false;
         this._showVersion = false;
+        this._configError = null;
         this._sliderValArr = [
             { str: '1 minute', secs: 60 },
             { str: '10 minutes', secs: 10*60 },
@@ -451,6 +461,13 @@ class Alert2Overview extends LitElement {
     }
     setConfig(config) {
         this._config = config;
+        this._configError = null;
+        if (this._config) {
+            if (Object.hasOwn(this._config, 'filter_entity_id') && typeof this._config.filter_entity_id !== 'string') {
+                this._configError = `Config field filter_entity_id must be a string, not of type ${typeof this._config.filter_entity_id}`;
+            }
+        }
+        this.slowedUpdate(true);
     }
     // Slider changed value
     slideCh(ev) {
@@ -505,7 +522,8 @@ class Alert2Overview extends LitElement {
         const outerThis = this;
         let entListHtml;
         if (this._sortedDispInfos.length == 0) {
-            entListHtml = html`<div id="jempt">No alerts active in the past ${this._sliderValArr[this._sliderVal].str}. No alerts snoozed or disabled.</div>`;
+            let filterStr = (this._config && this._config.filter_entity_id) ? " (filter applied)" : "";
+            entListHtml = html`<div id="jempt">No alerts active in the past ${this._sliderValArr[this._sliderVal].str}. No alerts snoozed or disabled.${filterStr}</div>`;
         } else {
             const ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked && !el.isSuperseded);
             entListHtml = [];
@@ -534,8 +552,12 @@ class Alert2Overview extends LitElement {
         }
         let versionHtml = this._showVersion ? html`<table class="tversions" cellspacing=0>
              <tr><td>Alert2 UI<td>${VERSION}</tr><tr><td>Alert2<td>v${manifestVersion}</tr></table>` : html``;
+        const title = (this._config && this._config.title) ? this._config.title : 'Alerts';
+        const cfgErrHtml = this._configError ?
+            html`<ha-alert alert-type=${"error"} style="display: inline-block;">${this._configError}</ha-alert>` : "";
         let foo = html`<ha-card>
-            <h1 class="card-header"><div class="name" @click=${this._toggleShowVersion}>Alerts</div>${versionHtml}</h1>
+            <h1 class="card-header"><div class="name" @click=${this._toggleShowVersion}>${title}</div>${versionHtml}</h1>
+            ${cfgErrHtml}
             <div class="card-content">
               <div style="display:flex; align-items: center; margin-bottom: 1em;">
                   <ha-slider .min=${0} .max=${this._sliderValArr.length-1} .step=${1} .value=${this._sliderVal} snaps ignore-bar-touch
@@ -587,7 +609,7 @@ class Alert2Overview extends LitElement {
     }
     _alertClick(ev, element, entityName) {
         let stateObj = this._hass.states[entityName];
-        let friendlyName = stateObj.attributes.friendly_name2;
+        let friendlyName = stateObj.attributes.friendly_name;
         let title = '';
         if (friendlyName) {
             title += `"${friendlyName}" (entity ${entityName})`;
@@ -722,6 +744,17 @@ class Alert2Overview extends LitElement {
             }
         }
         
+        let filterRegex = null;
+        if (this._config && this._config.filter_entity_id && typeof this._config.filter_entity_id === "string") {
+            let pattern = this._config.filter_entity_id;
+            if (!pattern.startsWith("/")) {
+                // Convert globs to regex
+                pattern = pattern.replace(/\./g, ".").replace(/\*/g, ".*");
+                pattern = `/^${pattern}$/`;
+            }
+            filterRegex = new RegExp(pattern.slice(1, -1));
+        }
+        
         const intervalSecs = this._sliderValArr[this._sliderVal].secs;
         //console.log('intervalSecs as hours', intervalSecs / 60 / 60);
         const nowMs = Date.now();
@@ -738,7 +771,9 @@ class Alert2Overview extends LitElement {
                     let lastChangeMs = Date.parse(ent.last_changed);
                     isOn = true;
                     testMs =  lastChangeMs;
-                    entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                    if (!filterRegex || filterRegex.test(entityName)) {
+                        entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                    }
                 } // else is off, which means acked, or is idle which means is off.
             } else if (entityName.startsWith('alert2.')) {
                 let lastAckMs = 0;
@@ -780,8 +815,11 @@ class Alert2Overview extends LitElement {
                     isAcked = true;  // treat snoozed or disabled alerts as already acked
                 }
                 //console.log('considering ', entityName, testMs - intervalStartMs);
-                if (isOn || intervalStartMs < testMs || not_enabled) {
-                    entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                const includeOldUnacked = this._config && isTruthy(this._config.include_old_unacked);
+                if (isOn || (!isAcked && includeOldUnacked) || intervalStartMs < testMs || not_enabled) {
+                    if (!filterRegex || filterRegex.test(entityName)) {
+                        entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                    }
                 }
             }
         }
@@ -1002,7 +1040,7 @@ class Alert2EntityRow extends LitElement  {
         }
         //let entHtml = '';
         //console.log('foo', this._config);
-        const friendlyName = this._hass.states[this._config.entity].attributes.friendly_name2;
+        const friendlyName = this._hass.states[this._config.entity].attributes.friendly_name;
         //console.log('foo3', this._hass.states[this._config.entity]);
         //console.log('foo3b', this._hass.states[this._config.entity].attributes);
         //console.log('foo2b', friendlyName);
@@ -1883,7 +1921,7 @@ class MoreInfoAlert2Container extends LitElement {
         //let stateObj = this.hass.states[this.config.entityName];
         let title = this.config.titleStr;
         if (0) {
-            let friendlyName = stateObj.attributes.friendly_name2;
+            let friendlyName = stateObj.attributes.friendly_name;
             let entityName = this.config.entityName;
             if (friendlyName) {
                 title += `"${friendlyName}" (entity ${entityName})`;
@@ -2167,9 +2205,9 @@ function isFloat(a) {
     let v = Number(a);
     return !isNaN(v);
 }
-function isTruthy(a) {
-    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
-}
+//function isTruthy(a) {
+//    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
+//}
 function makeEnum(obj) {
     return new Proxy(obj, { get(target, name) { if (obj[name]) { return obj[name] } else { throw new Error(`field ${name} not in obj`); } } });
 }

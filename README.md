@@ -140,6 +140,34 @@ For the purpose of ordering, alerts that are snoozed or disabled are treated as 
 
 If alert A is superseded by another alert that's firing, alert A will appear in UI without a badge, directly below the alert that supersedes it.
 
+### Config
+
+The Overview card supports a few configuration options:
+
+| Name | Description |
+|---|---|
+| `title` | Text to display at top of Overview card. Defaults to "Alerts" |
+| `include_old_unacked` | A boolean incidating whether to always show unacked alerts, even if they have fallen out of the display time window.  Can be truthy string values like "true", "on", "yes", or the opposites. Defaults to false. |
+| `filter_entity_id` |  A glob or regex filter that restricts the candidate set of Alert2 entities to be displayed. A glob is a string with \* in it at least once.  A regex is a string that begins and ends with "/". Defaults to "*" (i.e., do not exclude any entities) |
+
+Example Lovelace YAML config:
+
+    views:
+    - title: Monitoring
+      name: Example
+      cards:
+      - type: "custom:alert2-overview"
+        title: House Alerts
+        include_old_unacked: yes
+
+        # Glob filter
+        filter_entity_id: "alert2.house_*"
+        #
+        # OR
+        # Regex filter
+        filter_entity_id: "/house[12]_/"
+    
+
 ### Detailed alert info
 
 If you click on a specific alert listed in the alert overview, a dialog pops up with detailed info on the alert and notification controls. Example:
