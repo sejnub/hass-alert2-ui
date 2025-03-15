@@ -344,6 +344,9 @@ function getPriority(dispInfo) {
     }
     return 'low';
 }
+//function isTruthy(a) {
+//    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
+//}
 function isTruthy(aval) {
     if (typeof aval == 'boolean') { return aval; }
     if (typeof aval == 'number') { return aval > 0; }
@@ -747,8 +750,6 @@ class Alert2Overview extends LitElement {
             return;
         }
 
-        ///hacsfiles/hass-alert2-ui/alert2.js?hacstag=8533699481101
-        //"url": "/hacsfiles/hass-alert2-ui/alert2.js?hacstag=8533699481101",
         //console.log('doing big refresh');
         
         this._alert2StatesMap.clear();
@@ -2270,9 +2271,6 @@ function isFloat(a) {
     let v = Number(a);
     return !isNaN(v);
 }
-//function isTruthy(a) {
-//    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
-//}
 function makeEnum(obj) {
     return new Proxy(obj, { get(target, name) { if (obj[name]) { return obj[name] } else { throw new Error(`field ${name} not in obj`); } } });
 }
