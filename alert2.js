@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.10.3  (internal 59)';
+const VERSION = 'v1.10.3  (internal 60)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -85,7 +85,7 @@ class DisplayConfigMonitor {
         this.hass = newHass;
         this.checkSubscription();
         if (oldSensor !== newSensor && newSensor) {
-            console.log('DisplayConfigMonitor say startup or reload', newSensor.state);
+            //console.log('DisplayConfigMonitor saw startup or reload', newSensor.state);
             if (newSensor.state == 'on') {  // ha startup done, or reload
                 this.sawUpdate({ configChange: true });
             }
@@ -354,6 +354,11 @@ function isTruthy(aval) {
 }
 
 function popupMoreinfo(hass, element, entityName) {
+    jFireEvent(element, "hass-more-info", {
+        entityId: entityName
+    });
+    return;
+
     let stateObj = hass.states[entityName];
     let friendlyName = stateObj.attributes.friendly_name;
     let title = '';

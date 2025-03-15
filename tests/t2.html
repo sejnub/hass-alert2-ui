@@ -97,7 +97,7 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
+             if (0) {
                  jassert(await startTest(doTest4));
                  return;
              }
@@ -1225,8 +1225,6 @@
              jasserteq(detEnts.length, 2);
              jasserteq(detEnts[0].textContent, 'abc');
              jasserteq(detEnts[1].textContent, 'def');
-
-             jassert(false);
              
              // Type a search term
              let txtf = z.ao.shadowRoot.querySelector('ha-textfield');
@@ -1856,6 +1854,7 @@
                                          createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000),
                                          createState('n3', null, null, null) ],
                                     ['n1']);
+             z.ao.remove();
          }
         </script>
     </head>
