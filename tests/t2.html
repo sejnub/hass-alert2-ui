@@ -97,8 +97,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
-                 jassert(await startTest(doTestConfig));
+             if (1) {
+                 jassert(await startTest(doTest4));
                  return;
              }
              jassert(await startTest(doTestDefaults));
@@ -158,6 +158,9 @@
              return new Promise(resolve => setTimeout(resolve, ms));
          }
          function getRecentIso(msAgo) {
+             if (msAgo === null) {
+                 return null;
+             }
              return (new Date((new Date()).getTime() - msAgo)).toISOString();
          }
          function cloneHass(ahass) {
@@ -166,7 +169,7 @@
                  };
          }
          function createState(name, onAgoMs, offAgoMs, ackAgoMs=200) {
-             return { state: (offAgoMs < onAgoMs) ? 'off':'on',
+             return { state: (onAgoMs && onAgoMs < offAgoMs) ? 'on' : 'off',
                       attributes: { 'last_on_time': getRecentIso(onAgoMs),
                                     'last_off_time': getRecentIso(offAgoMs),
                                     'notification_control': NOTIFICATIONS_ENABLED,
@@ -1202,8 +1205,9 @@
                               { domain: 'd0', name: 'n5', condition: 'off', generator_name:'g1',generator:'n4' }
                           ]}})
              z.ao.remove();
-
+             
              z = await initTest('alert2-manager');
+             z.firstHass.states['sensor.alert2generator_g1'] = { attributes: { generated_ids: ['abc', 'def' ] } };
              await sleepMs(100);
              let srez = (await waitSearch()).results;
              jasserteq(srez.length, 5);
@@ -1214,6 +1218,15 @@
              jasserteq(rs[2].textContent, 'alert2.d1_n1');
              jasserteq(rs[3].textContent, 'alert2.d1_n2');
              jasserteq(rs[4].textContent, 'alert2.d1_n3');
+
+             let dets = z.ao.shadowRoot.querySelector('div.results > details');
+             jasserteq(dets.querySelector('summary').textContent, '2 entities');
+             let detEnts = dets.querySelectorAll('div');
+             jasserteq(detEnts.length, 2);
+             jasserteq(detEnts[0].textContent, 'abc');
+             jasserteq(detEnts[1].textContent, 'def');
+
+             jassert(false);
              
              // Type a search term
              let txtf = z.ao.shadowRoot.querySelector('ha-textfield');
@@ -1823,7 +1836,8 @@
              z = await initTest('alert2-overview', {}, { title: 'yay', include_old_unacked: 'true' });
              // n2 off and unacked, but outside interval but config set to include
              await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
-                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000),
+                                         createState('n3', null, null, null) ],
                                     ['n1', 'n2']);
              jasserteq(z.ao.shadowRoot.querySelector('h1').textContent.trim(), 'yay');
 
@@ -1831,14 +1845,16 @@
              z = await initTest('alert2-overview', {}, { include_old_unacked: 'true', filter_entity_id: '*n2' });
              // Try filter
              await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
-                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000),
+                                         createState('n3', null, null, null) ],
                                     ['n2']);
 
              z.ao.remove();
              z = await initTest('alert2-overview', {}, { include_old_unacked: 'true', filter_entity_id: '/n1/' });
              // Try filter with regex
              await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
-                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
+                                         createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000),
+                                         createState('n3', null, null, null) ],
                                     ['n1']);
          }
         </script>

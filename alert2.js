@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.10.3  (internal 52)';
+const VERSION = 'v1.10.3  (internal 59)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -125,7 +125,7 @@ class DisplayConfigMonitor {
         let dn_list = [];
         entityIdList.forEach((el)=> {
             let ent = this.hass.states[el];
-            if (ent) {
+            if (ent && ent.state !== 'unavailable') {
                 dn_list.push({ domain: ent.attributes['domain'], name: ent.attributes['name'] });
             }
         });
@@ -260,7 +260,7 @@ class SingleDisplayValMonitor {
         let oldHass = this.hass;
         this.hass = newHass;
         const newStateObj = newHass.states[this.entity_id];
-        if (!newStateObj) {
+        if (!newStateObj || newStateObj.state == 'unavailable') {
             // It could be that the entity was just removed from hass, but Alert2Overview has not yet removed
             // the corresponding rows.
             return;
@@ -301,21 +301,25 @@ class SingleDisplayValMonitor {
             this._subscribeInProgress = true;
             // I think trySubscribe=true implies that this._hass && this._config
             const stateObj = this.hass.states[this.entity_id];
-            //console.log('subscribing to', this.entity_id);
-            try {
-                this._unsubFunc = await this.hass.connection.subscribeMessage(
-                    (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
-                        type: 'alert2_watch_display_msg',
-                        domain: stateObj.attributes['domain'],
-                        name: stateObj.attributes['name'],
-                    });
-            } catch (err) {
-                if (err.code === 'no_display_msg') {
-                    // pass - maybe ent doesn't have a display message
-                //} else if (err.code == 'ent_not_found') {
-                    // pass - could be ent is a tracked alert and so can't have a display message
-                } else {
-                    console.error('subscribeMessage for ', this.entity_id, 'got error', err);
+            if (!stateObj || stateObj.state == 'unavailable') {
+                console.warn('Entity ', this.entity_id, ' and ', stateObj, ' unavailable or missing in checkDisplayMsg');
+            } else {
+                //console.log('subscribing to', this.entity_id);
+                try {
+                    this._unsubFunc = await this.hass.connection.subscribeMessage(
+                        (ev) => this.updateDisplayMsg(ev), { // ev is SchedulerEventData
+                            type: 'alert2_watch_display_msg',
+                            domain: stateObj.attributes['domain'],
+                            name: stateObj.attributes['name'],
+                        });
+                } catch (err) {
+                    if (err.code === 'no_display_msg') {
+                        // pass - maybe ent doesn't have a display message
+                        //} else if (err.code == 'ent_not_found') {
+                        // pass - could be ent is a tracked alert and so can't have a display message
+                    } else {
+                        console.error('subscribeMessage for ', this.entity_id, 'got error', err);
+                    }
                 }
             }
             this._subscribeInProgress = false;
@@ -347,6 +351,35 @@ function isTruthy(aval) {
         return ['yes','on','true', '1'].includes(aval.toLowerCase());
     }
     return false;
+}
+
+function popupMoreinfo(hass, element, entityName) {
+    let stateObj = hass.states[entityName];
+    let friendlyName = stateObj.attributes.friendly_name;
+    let title = '';
+    if (friendlyName) {
+        title += `"${friendlyName}" (entity ${entityName})`;
+    } else {
+        title += entityName;
+    }
+    //let innerHtml = html`<more-info-alert2  dialogInitialFocus .entityId=${entityName} .hass=${this.hass} >
+    //                     </more-info-alert2>`;
+    let innerElem = document.createElement('more-info-alert2');
+    innerElem.stateObj = stateObj;
+    //innerElem.entityId = entityName;
+    innerElem.setAttribute('dialogInitialFocus', '');
+    innerElem.hass = hass;
+    jCreateDialog(element, title, innerElem);
+    if (0) {
+        jFireEvent(element, "show-dialog", {
+            dialogTag: "more-info-alert2-container",
+            dialogImport: () => new Promise((resolve)=> { resolve(); }),
+            dialogParams: {
+                entityName: entityName,
+            },
+            addHistory: true
+        });
+    }
 }
 
 // A custom card that lists alerts that have fired recently
@@ -608,32 +641,7 @@ class Alert2Overview extends LitElement {
         return html`${element}`;
     }
     _alertClick(ev, element, entityName) {
-        let stateObj = this._hass.states[entityName];
-        let friendlyName = stateObj.attributes.friendly_name;
-        let title = '';
-        if (friendlyName) {
-            title += `"${friendlyName}" (entity ${entityName})`;
-        } else {
-            title += entityName;
-        }
-        //let innerHtml = html`<more-info-alert2  dialogInitialFocus .entityId=${entityName} .hass=${this.hass} >
-        //                     </more-info-alert2>`;
-        let innerElem = document.createElement('more-info-alert2');
-        innerElem.stateObj = stateObj;
-        //innerElem.entityId = entityName;
-        innerElem.setAttribute('dialogInitialFocus', '');
-        innerElem.hass = this._hass;
-        jCreateDialog(element, title, innerElem);
-        if (0) {
-            jFireEvent(element, "show-dialog", {
-                dialogTag: "more-info-alert2-container",
-                dialogImport: () => new Promise((resolve)=> { resolve(); }),
-                dialogParams: {
-                    entityName: entityName,
-                },
-                addHistory: true
-            });
-        }
+        popupMoreinfo(this._hass, element, entityName);
         return true;
     }
     static styles = css`
@@ -734,6 +742,8 @@ class Alert2Overview extends LitElement {
             return;
         }
 
+        ///hacsfiles/hass-alert2-ui/alert2.js?hacstag=8533699481101
+        //"url": "/hacsfiles/hass-alert2-ui/alert2.js?hacstag=8533699481101",
         //console.log('doing big refresh');
         
         this._alert2StatesMap.clear();
@@ -766,6 +776,9 @@ class Alert2Overview extends LitElement {
             let isOn = false;
             let testMs = 0; // 1970
             const ent = this._hass.states[entityName];
+            if (ent.state === 'unavailable') {
+                continue;
+            }
             if (entityName.startsWith('alert.')) {
                 if (ent.state == 'on') { // on means unacked
                     let lastChangeMs = Date.parse(ent.last_changed);
@@ -806,7 +819,7 @@ class Alert2Overview extends LitElement {
                     } // else alert has never fired
                 }
                 if (isNaN(testMs)) {
-                    console.error('Entity ', ent.entity_id, ent.state, 'parse error lastFireMs', testMs);
+                    console.error('Entity ', ent.entity_id, ent.state, ent.attributes, 'parse error lastFireMs', testMs);
                     continue;
                 }
                 const not_enabled = (ent.attributes.notification_control &&
@@ -814,9 +827,11 @@ class Alert2Overview extends LitElement {
                 if (not_enabled) {
                     isAcked = true;  // treat snoozed or disabled alerts as already acked
                 }
-                //console.log('considering ', entityName, testMs - intervalStartMs);
+                //console.log('considering ', entityName, testMs);
                 const includeOldUnacked = this._config && isTruthy(this._config.include_old_unacked);
-                if (isOn || (!isAcked && includeOldUnacked) || intervalStartMs < testMs || not_enabled) {
+                // Check testMs so we ignore alerts that have never fired
+                const isOldUnacked = !isAcked && testMs > 0;
+                if (isOn || (isOldUnacked && includeOldUnacked) || intervalStartMs < testMs || not_enabled) {
                     if (!filterRegex || filterRegex.test(entityName)) {
                         entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
                     }
@@ -1561,7 +1576,7 @@ class MoreInfoAlert2 extends LitElement {
         let stateObj = this.stateObj;
         let stateValue = stateObj.attributes.notification_control;
         let notification_status;
-        if (stateValue == null) {
+        if (stateValue == null || stateValue == undefined) {
             notification_status = "unknown";
         } else if (stateValue == NOTIFICATIONS_ENABLED) {
             notification_status = "enabled";
@@ -2058,6 +2073,7 @@ class Alert2Manager extends LitElement {
         this.fetchD = debounce(this.updateSearch.bind(this), gDebounceMs);
         this._searchTxt = '';
         this._searchStatus = { inProgress: false, rez: '', error: null };
+        this._numErrs = 0;
     }
     set hass(newHass) {
         const oldHass = this._hass;
@@ -2078,11 +2094,19 @@ class Alert2Manager extends LitElement {
             retv = await this._hass.callApi('POST', 'alert2/manageAlert',
                                             { search: { str: this._searchTxt } });
         } catch (err) {
-            //console.error('search error', err);
-            this._searchStatus = { inProgress: false, error: 'http err: ' + JSON.stringify(err),
-                                rez: null };
+            this._numErrs += 1;
+            if (this._numErrs > 20) {
+                console.error('search error', err);
+                this._searchStatus = { inProgress: false, error: 'http err: ' + JSON.stringify(err),
+                                       rez: null };
+                setTimeout(()=>{ this.updateSearch(); }, 10000);
+            } else {
+                // we're hopefully starting up
+                setTimeout(()=>{ this.updateSearch(); }, 2000);
+            }
             return;
         }
+        this._numErrs = 0;
         retv.results.sort((a,b)=>{ return a.domain == b.domain ? (a.name > b.name ? 1 : -1) : (a.domain > b.domain ? 1 : -1) });
         this._searchStatus = { inProgress: false, error: null, rez: retv };
     }
@@ -2098,7 +2122,10 @@ class Alert2Manager extends LitElement {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
         innerElem.entInfo = el;
-        innerElem.didSomethingCb = ()=>{ this.fetchD(); };
+        innerElem.didSomethingCb = ()=>{
+            //console.log('didSomethingCb in alert2-create', this);
+            this.fetchD();
+        };
         jCreateDialog(this, 'Edit alert', innerElem);
     }
     getSearchStatus() {    return this._searchStatus;    } // for testing
@@ -2119,6 +2146,23 @@ class Alert2Manager extends LitElement {
                         alist.push(html`<div class="domainheader">${el.domain}</div>`);
                     }
                     alist.push(html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
+                    if (el.id.startsWith('sensor.alert2generator_')) {
+                        let stateObj = this._hass.states[el.id];
+                        console.log(el.id, stateObj);
+                        if (stateObj && Object.hasOwn(stateObj.attributes, 'generated_ids')) {
+                            let ids = stateObj.attributes['generated_ids'];
+                            let entsHtml = [];
+                            let outerThis = this;
+                            ids.forEach((anId)=> {
+                                let aclick = function(ev) {
+                                    let elem = ev.target;
+                                    popupMoreinfo(outerThis._hass, elem, anId);
+                                }
+                                entsHtml.push(html`<div class="genEntDiv" @click=${aclick}>${anId}</div>`);
+                            });
+                            alist.push(html`<details><summary>${ids.length} entities</summary>${entsHtml}</div>`);
+                        }
+                    }
                 }
                 resultHtml = html`<div class="results">${alist}</div>`;
             } else {
@@ -2155,7 +2199,10 @@ class Alert2Manager extends LitElement {
     async createNew(ev) {
         let innerElem = document.createElement('alert2-create');
         innerElem.hass = this._hass;
-        innerElem.didSomethingCb = ()=>{ this.fetchD(); };
+        innerElem.didSomethingCb = ()=>{
+            //console.log('didSomethingCb in createNew', this);
+            this.fetchD();
+        };
         jCreateDialog(this, 'Create/edit alert', innerElem);
     }
     async editDefaults(ev) {
@@ -2186,18 +2233,31 @@ class Alert2Manager extends LitElement {
         margin-top: -16px;
         overflow: hidden;
       }
-      .anent {
-          cursor: pointer;
-          padding: 0.7em 0 0.7em 0.7em;
-      }
-      .anent:hover {
-          background-color: var(--secondary-background-color);
-      }
       .domainheader {
          font-size: 0.9em;
          font-weight: bold;
          margin-bottom: -0.7em;
       }
+      /* putting details padding here just to pick up the same padding-bottom */
+      .anent, details {
+          padding: 0.7em 0 0.7em 0.7em;
+      }
+      .anent {
+          cursor: pointer;
+      }
+      .anent:hover {
+          background-color: var(--secondary-background-color);
+      }
+      details {
+         padding-left: 1.5em;
+         margin-top: -1.5em;
+      }
+      details > div {
+         padding-left: 1em;
+         user-select: text;
+         cursor: pointer;
+      }
+
     `;
 };
 
@@ -3038,6 +3098,7 @@ class Alert2Create extends LitElement {
         }
         abutton.actionSuccess();
         this.requestUpdate();
+        //console.log('about to call didSomethingCb');
         this.didSomethingCb();
     }
     _change(ev) {
