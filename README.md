@@ -167,6 +167,13 @@ Example Lovelace YAML config:
         # Regex filter
         filter_entity_id: "/house[12]_/"
     
+The same config options are available in the UI itself.  When you add the Overview card, you can directly edit the "code" in YAML to specify options:
+
+    type: custom:alert2-overview
+    title: House Alerts
+    filter_entity_id: ...
+
+
 
 ### Detailed alert info
 
