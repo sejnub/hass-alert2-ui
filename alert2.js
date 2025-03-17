@@ -568,6 +568,29 @@ class Alert2Overview extends LitElement {
         } else {
             const ackedIdx = this._sortedDispInfos.findIndex(el => el.isAcked && !el.isSuperseded);
             entListHtml = [];
+
+            if (0) {
+                // For each alert that supersedes other alerts we're going to show,
+                // accumulate count of how many superseded alerts will appear below.
+                let supersedesCount = new Array(this._sortedDispInfos.length).fill(0);
+                let currSCount = 0;
+                for (let idx = this._sortedDispInfos.length - 1 ; idx >= 0 ; idx--) {
+                    const dispInfo = this._sortedDispInfos[idx];
+                    if (dispInfo.isSuperseded) {
+                        currSCount += 1;
+                    } else {
+                        supersedesCount[idx] = currSCount;
+                        currSCount = 0;
+                    }
+                    if (idx == ackedIdx) {
+                        jassert(currSCount == 0, currSCount);
+                    }
+                }
+                jassert(currSCount == 0, currSCount);
+            }
+            
+            // Now generate html via entListHtml
+            let inDetails = null; // becomes list of superseded alerts
             for (let idx = 0 ; idx < this._sortedDispInfos.length ; idx++) {
                 let dispInfo = this._sortedDispInfos[idx];
                 let entityConf = { entity: dispInfo.entityName };
@@ -579,11 +602,27 @@ class Alert2Overview extends LitElement {
                     // This should have no effect:
                     //     aconf.tap_action = { action: "fire-dom-event" };
                 }
+                if (inDetails !== null && !dispInfo.isSuperseded) {
+                    entListHtml.push(html`<details><summary>${inDetails.length} superseded ${inDetails.length == 1 ? "alert" : "alerts"}</summary>${inDetails}</details>`);
+                    inDetails = null;
+                }
                 if (idx == ackedIdx) {
+                    jassert(inDetails === null, inDetails);
                     entListHtml.push(html`<div id="ackbar">---- Acked, snoozed or disabled ---</div>`);
                 }
                 //console.log('rendering', dispInfo.entityName, ' and ', dispInfo.isSuperseded, dispInfo);
-                entListHtml.push(this.renderEntity(entityConf, dispInfo));
+                if (dispInfo.isSuperseded) {
+                    if (inDetails === null) {
+                        inDetails = [];
+                    }
+                    inDetails.push(this.renderEntity(entityConf, dispInfo));
+                } else {
+                    jassert(inDetails === null, inDetails);
+                    entListHtml.push(this.renderEntity(entityConf, dispInfo));
+                }
+            }
+            if (inDetails !== null) {
+                entListHtml.push(html`<details><summary>${inDetails.length} superseded ${inDetails.length == 1 ? "alert" : "alerts"}</summary>${inDetails}</details>`);
             }
         }
         let manifestVersion = 'unknown';
@@ -686,12 +725,20 @@ class Alert2Overview extends LitElement {
       }
       .aRowElement {
           display: block;
+          margin-top: 1em;
       }
-      .aRowElement:not(:last-child) {
-          margin-bottom: 1em;
+      .aRowElement {
       }
-      hui-alert2-entity-row.superseded {
-          margin-top: -0.8em;  /* to counteract the aRowElement of the row above */
+      details {
+          /*       hui-alert2-entity-row.superseded { */
+          /* margin-top: -0.8em;  to counteract the aRowElement of the row above */
+          padding-left: 56px; /* 40px for state badge + 16px padding */
+      }
+      details[open] summary {
+          margin-bottom: -0.5em;
+      }
+      details > hui-alert2-entity-row {
+          margin-left: -56px;
       }
       .tversions {
         font-size: 1rem;

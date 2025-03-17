@@ -97,8 +97,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
-                 jassert(await startTest(doTest4));
+             if (1) {
+                 jassert(await startTest(doTest10));
                  return;
              }
              jassert(await startTest(doTestDefaults));
@@ -1738,6 +1738,8 @@
                  { domain: 'd', name: 'n3', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
                  { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ] },
                  { domain: 'd', name: 'n5', condition: 'off', priority: 'medium' },
+                 { domain: 'd', name: 'n6', condition: 'off' },
+                 { domain: 'd', name: 'n7', condition: 'off' },
              ] };
              let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              jassertObjeq(tobj, {});
@@ -1753,12 +1755,24 @@
              stateBadge = tEls[1].shadowRoot.querySelector('state-badge');
              jassert(stateBadge.classList.contains('lowpri'));
              
-
-             
              // n2 supersedes n1 so should be below
-             await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
-                                      createState('n2', 2000, 7000, 20000) ],
-                                    ['n2', 'n1']);
+             await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
+                                      createState('n4', 5000, 7000, 20000),
+                                      createState('n7', 6000, 7000, 20000),
+                                      createState('n6', 3000, 7000, 20000),
+                                      createState('n2', 4000, 7000, 20000) ],
+                                    ['n6', 'n4', 'n2', 'n1', 'n7']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 2);
+
+             // Check spacing when superseded clump is last alert
+             await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
+                                      createState('n4', 5000, 7000, 20000),
+                                      createState('n6', 3000, 7000, 20000),
+                                      createState('n2', 4000, 7000, 20000) ],
+                                    ['n6', 'n4', 'n2', 'n1']);
+             
+
              // same with n3, even with "on" time ordering reversed
              await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
                                       createState('n3', 1000, 7000, 20000) ],

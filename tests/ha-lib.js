@@ -541,7 +541,7 @@ class HaSlider extends MdSlider {
     };
     class StateBadge extends LitElement {
         render() {
-            return html`<div style="width: 20px; height: 20px; border: 1px solid green;">!</div>`;
+            return html`<div style="width: 40px; height: 20px; border: 1px solid green; box-sizing: border-box;">!</div>`;
         }
     };
     class HaMdListItem extends MdListItem {
