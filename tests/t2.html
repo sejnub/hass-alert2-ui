@@ -97,7 +97,7 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
+             if (0) {
                  jassert(await startTest(doTest10));
                  return;
              }
@@ -199,8 +199,14 @@
              for (let idx = 0 ; idx < nodeList.length ; idx++) {
                  jassert(tEls[idx].shadowRoot.innerHTML.includes(nodeList[idx]));
              }
+             let foundBelow = 0;
              tEls = z.ao.shadowRoot.querySelectorAll('div#ackbar ~ hui-alert2-entity-row');
-             jasserteq(tEls.length, nBelow);
+             foundBelow += tEls.length;
+             tEls = z.ao.shadowRoot.querySelectorAll('div#ackbar ~ details');
+             tEls.forEach((el)=> {
+                 foundBelow += el.querySelectorAll('hui-alert2-entity-row').length;
+             });
+             jasserteq(foundBelow, nBelow);
          }
          function createEventState(name, fireAgoMs, ackAgoMs=200) {
              return { state: getRecentIso(fireAgoMs),
