@@ -338,11 +338,13 @@ class SingleDisplayValMonitor {
     }
 };
 
-function getPriority(dispInfo) {
-    if (dispInfo.configInfo) {
-        return dispInfo.configInfo.priority;
+function getPriority(hass, dispInfo) {
+    let priority = null;
+    if (hass && hass.states[dispInfo.entityName]) {
+        // may be null if older server (March 2025)
+        priority = hass.states[dispInfo.entityName].attributes.priority;
     }
-    return 'low';
+    return priority ? priority : 'low';
 }
 //function isTruthy(a) {
 //    return !isNaN(parseInt(a)) || ['yes','no','on','off','true','false'].includes(a.toLowerCase());
@@ -601,6 +603,7 @@ class Alert2Overview extends LitElement {
                     // which we're not anymore.
                     // This should have no effect:
                     //     aconf.tap_action = { action: "fire-dom-event" };
+                    entityConf.priority = getPriority(this._hass, dispInfo);
                 }
                 if (inDetails !== null && !dispInfo.isSuperseded) {
                     entListHtml.push(html`<details><summary>${inDetails.length} superseded ${inDetails.length == 1 ? "alert" : "alerts"}</summary>${inDetails}</details>`);
@@ -663,7 +666,6 @@ class Alert2Overview extends LitElement {
         if (element instanceof Alert2EntityRow) {
             element.displayValMonitor = this._displayValMonitor;
             element.isSuperseded = dispInfo.isSuperseded;
-            element.priority = getPriority(dispInfo);
             if (dispInfo.isSuperseded) {
                 element.classList.add('superseded');
             }
@@ -932,14 +934,15 @@ class Alert2Overview extends LitElement {
         // 2. Sort the readyToSort entities
         //
         // sort func return negative if a should come before b
+        let outerThis = this;
         let sortFunc = function(a, b) {
             if (a.isAcked != b.isAcked) {
                 return a.isAcked ? 1 : -1;
             } else if (a.isOn != b.isOn) {
                 return a.isOn ? -1 : 1;
             } else {
-                let aIdx = ['low', 'medium', 'high'].indexOf(getPriority(a));
-                let bIdx = ['low', 'medium', 'high'].indexOf(getPriority(b));
+                let aIdx = ['low', 'medium', 'high'].indexOf(getPriority(outerThis._hass, a));
+                let bIdx = ['low', 'medium', 'high'].indexOf(getPriority(outerThis._hass, b));
                 if (aIdx != bIdx) {
                     return aIdx > bIdx ? -1 : 1;
                 } else {
@@ -1046,9 +1049,6 @@ class Alert2EntityRow extends LitElement  {
     set isSuperseded(abool) {
         this._isSuperseded = abool;
     }
-    set priority(apri) {
-        this._priority = apri;
-    }
     constructor() {
         super();
         this._hass = null;
@@ -1059,7 +1059,6 @@ class Alert2EntityRow extends LitElement  {
         this.display_change_cb = null;
         this._displayValMonitor = null;
         this._isSuperseded = false;
-        this._priority = 'low';
     }
     setConfig(config) {
         if (!config || !config.entity) {
@@ -1124,9 +1123,10 @@ class Alert2EntityRow extends LitElement  {
         }
         let stateClass = 'pointer';
         if (this._isSuperseded) {  stateClass += ' superseded'; }
-        if (this._priority == 'low') {  stateClass += ' lowpri'; }
-        if (this._priority == 'medium') {  stateClass += ' mediumpri'; }
-        if (this._priority == 'high') {  stateClass += ' highpri'; }
+        const priority = this._config ? this._config.priority : 'low';
+        if (priority == 'low') {  stateClass += ' lowpri'; }
+        if (priority == 'medium') {  stateClass += ' mediumpri'; }
+        if (priority == 'high') {  stateClass += ' highpri'; }
         return html`
         <div class="mainrow">
             <div class="outhead">

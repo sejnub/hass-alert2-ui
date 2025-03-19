@@ -168,13 +168,14 @@
                      states: Object.assign({}, ahass['states'])
                  };
          }
-         function createState(name, onAgoMs, offAgoMs, ackAgoMs=200) {
+         function createState(name, onAgoMs, offAgoMs, ackAgoMs=200, priority='low') {
              return { state: (onAgoMs && onAgoMs < offAgoMs) ? 'on' : 'off',
                       attributes: { 'last_on_time': getRecentIso(onAgoMs),
                                     'last_off_time': getRecentIso(offAgoMs),
                                     'notification_control': NOTIFICATIONS_ENABLED,
                                     'last_ack_time': getRecentIso(ackAgoMs),
                                     'fires_since_last_notify': 0,
+                                    'priority': priority,
                                     domain: 'd',
                                     name: name,
                       },
@@ -1652,7 +1653,7 @@
              dinfos = [ { entityName: 'alert2.d_n1' } ];
              dc.addConfigInfo(dinfos);
              jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
-             await sleepMs(100);
+             await sleepMs(150);
              jasserteq(dataReadyCbCount, 1);
              jasserteq(dataReadyCbReloadCount, 1);
              dc.addConfigInfo(dinfos);
@@ -1753,7 +1754,7 @@
 
              // n5 is higher priority so should be above if on
              await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
-                                      createState('n5', 5000, 7000, 20000) ],
+                                      createState('n5', 5000, 7000, 20000, priority='medium') ],
                                     ['n5', 'n1']);
              let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              let stateBadge = tEls[0].shadowRoot.querySelector('state-badge');
@@ -1770,7 +1771,7 @@
                                     ['n6', 'n4', 'n2', 'n1', 'n7']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 2);
-
+             
              // Check spacing when superseded clump is last alert
              await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
                                       createState('n4', 5000, 7000, 20000),
