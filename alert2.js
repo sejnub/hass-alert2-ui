@@ -132,127 +132,6 @@ class SupersedeMgr {
 }
 
 //
-// updateCb called with isReload true or false indicating if it's a full reload, or just update to what
-// already we know of.
-//
-class DisplayConfigMonitor {
-    constructor(updateCb) {
-        this.hass = null;
-        this.cache = new LRU(100); // map from entityId -> display config info
-        // currCfgMap is so we know what we're currently showing, even if it's larger than the LRU cache
-        this.currCfgMap = {}; // entityId -> config info
-        this._updateCb = updateCb;
-        this._unsubFunc = null;
-        this.subscribeInProgress = false;
-    }
-    updateHass(newHass) {
-        let oldSensor = this.hass ? this.hass.states['binary_sensor.alert2_ha_startup_done'] : null;
-        let newSensor = newHass.states['binary_sensor.alert2_ha_startup_done'];
-        this.hass = newHass;
-        this.checkSubscription();
-        if (oldSensor !== newSensor && newSensor) {
-            //console.log('DisplayConfigMonitor saw startup or reload', newSensor.state);
-            if (newSensor.state == 'on') {  // ha startup done, or reload
-                this.sawUpdate({ configChange: true });
-            }
-        }
-    }
-    // The only update type we support is that the config may have completely changed and needs
-    // to be reloaded from scratch. This happens either due to subscribed msg or from reload/startup.
-    sawUpdate(ev) {
-        console.log('sawUpdate, clearing all caches and refetching fetchMore');
-        this.cache.clear();
-        for (const entId in this.currCfgMap) {
-            this.currCfgMap[entId] = null;
-        }
-        // We'll let the cb figure out correct entity set and call addConfigInfo to trigger refresh
-        this._updateCb(true); // isReload=true
-    }
-    shutdown() {
-        this.subscribeInProgress = true; // so don't resubscribe in a timeout
-        if (this._unsubFunc) {
-            this._unsubFunc();
-        }
-    }
-    async checkSubscription() {
-        if (!this.hass) { return; }
-        if (!this._unsubFunc && !this.subscribeInProgress) {
-            this.subscribeInProgress = true;
-            try {
-                this._unsubFunc = await this.hass.connection.subscribeMessage(
-                    (ev) => this.sawUpdate(ev), { // ev is SchedulerEventData
-                        type: 'alert2_watch_display_config',
-                    });
-            } catch (err) {
-                console.error('DisplayValMonitor subscribe got error', err);
-                this.subscribeInProgress = false;
-                setTimeout(()=>{ this.checkSubscription(); }, 5000);
-                return;
-            }
-            this.subscribeInProgress = false;
-        }
-    }
-    async fetchMore(entityIdList) {
-        if (!this.hass) { return; }
-        let dn_list = [];
-        entityIdList.forEach((el)=> {
-            let ent = this.hass.states[el];
-            if (ent && ent.state !== 'unavailable') {
-                dn_list.push({ domain: ent.attributes['domain'], name: ent.attributes['name'] });
-            }
-        });
-        if (dn_list.length > 0) {
-            let rez = await this.hass.connection.sendMessagePromise({
-                type: 'alert2_get_display_config',
-                dn_list: dn_list
-            });
-            //console.log('fetchMore got ', rez);
-            let updatedMap = false;
-            rez.forEach((el)=>{
-                // Convert config.supersededByList to config.supersededBySet
-                el.config.supersededBySet = new Set(el.config.supersededByList);
-                delete el.config.supersededByList;
-                
-                if (Object.hasOwn(this.currCfgMap, el.entityId)) {
-                    this.currCfgMap[el.entityId] = el.config;
-                    updatedMap = true;
-                }
-                this.cache.set(el.entityId, el.config);
-            });
-            if (updatedMap) {
-                this._updateCb(false); // isReload=false
-            }
-        }
-    }
-    addConfigInfo(entDispInfos) {
-        let fetchList = [];
-        let oldCfgMap = this.currCfgMap;
-        this.currCfgMap = {};
-        for (let idx = 0 ; idx < entDispInfos.length ; idx++) {
-            let entName = entDispInfos[idx].entityName;
-            let di = this.cache.get(entName);
-            if (di == undefined) {
-                if (oldCfgMap[entName]) {
-                    entDispInfos[idx].configInfo = oldCfgMap[entName];
-                    this.currCfgMap[entName] = oldCfgMap[entName];
-                    this.cache.set(entName, oldCfgMap[entName]);
-                } else {
-                    fetchList.push(entName);
-                    this.currCfgMap[entName] = null;
-                    entDispInfos[idx].configInfo = null;
-                }
-            } else {
-                entDispInfos[idx].configInfo = di;
-                this.currCfgMap[entName] = di;
-            }
-        }
-        if (fetchList.length > 0) {
-            this.fetchMore(fetchList);
-        }
-    }
-}
-
-//
 // The purpose of DisplayValMonitor is to preserve the display_msg fields of entities shown
 // in the Alert2Overview card while that card is re-rendering.  Since display_msg is not stored
 // in hass.states, if we don't preserve it, we'd have to refetch it, which results in flashing in
@@ -529,7 +408,6 @@ class Alert2Overview extends LitElement {
         // Check for entities aging out of UI window 6 times each selected interval.
         // e.g., 6 times ever 4 hours
         this._updateIntervalFactor = 6;
-        this._displayConfigMonitor = null;
         this._displayValMonitor = null;
     }
     // Rate limit how often jrefresh is called.
@@ -566,25 +444,13 @@ class Alert2Overview extends LitElement {
         if (this._displayValMonitor) {
             this._displayValMonitor.updateHass(newHass);
         }
-        if (this._displayConfigMonitor) {
-            this._displayConfigMonitor.updateHass(newHass);
-        }
         this.slowedUpdate(false);
     }
     connectedCallback() {
         super.connectedCallback();
-        let aCb = (isReload) =>{
-            if (isReload) {
-                this.slowedUpdate(isReload);
-            } else {
-                this.resort(this._sortedDispInfos);
-            }
-        }
         this._displayValMonitor = new DisplayValMonitor();
-        this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
         if (this._hass) {
             this._displayValMonitor.updateHass(this._hass);
-            this._displayConfigMonitor.updateHass(this._hass);
         }
         this.restartUpdateTimer();
     }
@@ -600,10 +466,6 @@ class Alert2Overview extends LitElement {
         if (this._displayValMonitor) {
             this._displayValMonitor.shutdown();
             this._displayValMonitor = null;
-        }
-        if (this._displayConfigMonitor) {
-            this._displayConfigMonitor.shutdown();
-            this._displayConfigMonitor = null;
         }
     }
     setConfig(config) {
@@ -906,6 +768,7 @@ class Alert2Overview extends LitElement {
 
         // Supersedes processing
         //
+        const startMs = Date.now();
         // Create map of domain,name to entity_id
         let dnToKey = (d, n) => { return `d=${d},n=${n}`; }
         let entIdMap = new Map();
@@ -915,27 +778,29 @@ class Alert2Overview extends LitElement {
                 entIdMap.set(dnToKey(stateObj.attributes.domain, stateObj.attributes.name), entityName);
             }
         }
+        // Add all supersedes info to a new SupersedeMgr
+        // TODO - save SupersedeMgr across refreshes
         let supersedeMgr = new SupersedeMgr();
-        for (let entityName in this._hass.states) {
-            if (entityName.startsWith('alert2.')) {
-                let stateObj = this._hass.states[entityName];
-                // looks like supersedes is an array
-                if (Object.hasOwn(stateObj.attributes, 'supersedes')) {
-                    let sList = [];
-                    stateObj.attributes.supersedes.forEach((el) => {
-                        jassert(el.domain && el.name, el, entityName);
-                        let key = dnToKey(el.domain, el.name);
-                        if (entIdMap.has(key)) {
-                            let entId = entIdMap.get(key);
-                            sList.push(entId);
-                        }
-                    });
-                    supersedeMgr.addNode(entityName, sList);
-                    //console.log('supersedes', entityName, stateObj.attributes.supersedes, typeof(stateObj.attributes.supersedes));
-                }
+        for (const entityName of entIdMap.values()) {
+            let stateObj = this._hass.states[entityName];
+            // looks like supersedes is an array
+            if (Object.hasOwn(stateObj.attributes, 'supersedes')) {
+                let sList = [];
+                stateObj.attributes.supersedes.forEach((el) => {
+                    jassert(el.domain && el.name, el, entityName);
+                    let key = dnToKey(el.domain, el.name);
+                    if (entIdMap.has(key)) {
+                        let entId = entIdMap.get(key);
+                        sList.push(entId);
+                    }
+                });
+                supersedeMgr.addNode(entityName, sList);
+                //console.log('supersedes', entityName, stateObj.attributes.supersedes, typeof(stateObj.attributes.supersedes));
             }
         }
-        console.log('refresh', this._hass.states, supersedeMgr.supersedesMap, supersedeMgr.supersededByMap);
+        const endMs = Date.now();
+        console.log(`Recalculating supersedes took ${endMs-startMs} ms`);
+        //console.log('refresh', this._hass.states, supersedeMgr.supersedesMap, supersedeMgr.supersededByMap);
         
         this._alert2StatesMap.clear();
         for (let entityName in this._hass.states) {
@@ -1048,12 +913,6 @@ class Alert2Overview extends LitElement {
         let toPlace = new Set();
         let readyToSort = new Set();
         let skipped = new Set();
-        // We have the list of entities, now get any cached display config info
-        // This will also start fetch of missing config infos. When that's done, it'll
-        // trigger a call to resort()
-        if (this._displayConfigMonitor) {
-            this._displayConfigMonitor.addConfigInfo(entDispInfos);
-        }
         let readyToSortDispInfos = [];
         
         entDispInfos.forEach((el)=> {
@@ -2244,7 +2103,6 @@ class Alert2Tools {
     static get html() { return html; }
     static set debounceMs(v) { gDebounceMs = v; }
     static get DisplayValMonitor() { return DisplayValMonitor; }
-    static get DisplayConfigMonitor() { return DisplayConfigMonitor; }
     static get SupersedeMgr() { return SupersedeMgr; }
 };
 customElements.define('alert2-tools', Alert2Tools);

@@ -105,9 +105,9 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (1) {
-                 jassert(await startTest(doTest10));
-                 jassert(await startTest(doTestSupersedeMgr));
+             if (0) {
+                 jassert(await startTest(doTest6));
+                 //jassert(await startTest(doTestSupersedeMgr));
                  return;
              }
              jassert(await startTest(doTestDefaults));
@@ -118,7 +118,6 @@
              jassert(await startTest(doTest6));
              jassert(await startTest(doTest7));
              jassert(await startTest(doTest8));
-             //jassert(await startTest(doTest9));
              jassert(await startTest(doTest10));
              jassert(await startTest(doTestConfig));
              jassert(await startTest(doTestSupersedeMgr));
@@ -1608,169 +1607,8 @@
 
              z.ao.remove();
          }
-         async function doTest9() {
-             let z = await initTest('alert2-create');
-             let yamlCfg = { alerts: [
-                 { domain: 'd', name: 'n1', condition: 'off' },
-                 { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] }
-             ] };
-             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-             jassertObjeq(tobj, {});
-             
-             let alert2Tools = customElements.get('alert2-tools');
-             let dataReadyCbCount = 0;
-             let dataReadyCbReloadCount = 0;
-             let dc = new alert2Tools.DisplayConfigMonitor((isReload) => { if (isReload) { dataReadyCbReloadCount += 1; } else { dataReadyCbCount += 1; }});
-             jasserteq(dataReadyCbCount, 0);
-
-             // No display should be fine
-             dc.addConfigInfo([]);
-             jasserteq(dataReadyCbCount, 0);
-
-             // No hass yet
-             dinfos = [ { entityName: 'alert2.d_n1' } ];
-             dc.addConfigInfo(dinfos);
-             await sleepMs(10);
-             jasserteq(dataReadyCbCount, 0);
-             jasserteq(dataReadyCbReloadCount, 0);
-
-             dinfos = [];
-             dc.addConfigInfo(dinfos);
-             await sleepMs(200);
-             jasserteq(dataReadyCbCount, 0);
-             jasserteq(dataReadyCbReloadCount, 0);
-             
-             // hass, but still in startup
-             let hass = { states: {
-                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
-                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
-                 'binary_sensor.alert2_ha_startup_done': { state: 'off' },
-             },
-                          callApi: z.firstHass.callApi,
-                          callWs: z.firstHass.callWs,
-                          connection: z.firstHass.connection
-             };
-             dc.updateHass(hass);
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 0);
-             jasserteq(dataReadyCbReloadCount, 0);
-             // startup done
-             hass = { states: {
-                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
-                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
-                 'binary_sensor.alert2_ha_startup_done': { state: 'on' },
-             },
-                          callApi: z.firstHass.callApi,
-                          callWs: z.firstHass.callWs,
-                          connection: z.firstHass.connection
-             };
-             dc.updateHass(hass);
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 0);
-             jasserteq(dataReadyCbReloadCount, 1);
-             
-             dinfos = [ { entityName: 'alert2.d_n1' } ];
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
-             await sleepMs(150);
-             jasserteq(dataReadyCbCount, 1);
-             jasserteq(dataReadyCbReloadCount, 1);
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
-
-             // Should be cached now, so response should be immediate
-             dinfos = [ { entityName: 'alert2.d_n1' } ];
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 1);
-
-             // Reload (because we change the binary_sensor) should clear the cache and refetch everything.
-             console.log('\ntest\n');
-             hass = { states: {
-                 'alert2.d_n1': { attributes: { domain: 'd', name: 'n1' } },
-                 'alert2.d_n2': { attributes: { domain: 'd', name: 'n2' } },
-                 'binary_sensor.alert2_ha_startup_done': { state: 'on' },
-             },
-                          callApi: z.firstHass.callApi,
-                          callWs: z.firstHass.callWs,
-                          connection: z.firstHass.connection
-             };
-             dc.updateHass(hass);
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 1);
-             jasserteq(dataReadyCbReloadCount, 2);
-
-             // addConfigInfo again should trigger a new fetch
-             dinfos = [ { entityName: 'alert2.d_n1' } ];
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: null } ] );
-             jasserteq(dataReadyCbCount, 1);
-             jasserteq(dataReadyCbReloadCount, 2);
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 2);
-             jasserteq(dataReadyCbReloadCount, 2);
-             
-             // Now should be immediate
-             dinfos = [ { entityName: 'alert2.d_n1' } ];
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } } ] );
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 2);
-             jasserteq(dataReadyCbReloadCount, 2);
-
-             // Fetch of n2 is new so won't be immediate
-             dinfos = [ { entityName: 'alert2.d_n1' }, { entityName:'alert2.d_n2'} ];
-             dc.addConfigInfo(dinfos);
-             jasserteq(dataReadyCbCount, 2);
-             jasserteq(dataReadyCbReloadCount, 2);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
-                                    { entityName: 'alert2.d_n2', configInfo: null }
-             ] );
-             //    fetch happens, we get callback, and then next request has immediate results
-             await sleepMs(100);
-             jassertObjeq(dinfos, [ { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
-                                    { entityName: 'alert2.d_n2', configInfo: null }
-             ] );
-             jasserteq(dataReadyCbCount, 3);
-             jasserteq(dataReadyCbReloadCount, 2);
-             dc.addConfigInfo(dinfos);
-             jassertObjeq(dinfos, [
-                 { entityName: 'alert2.d_n1', configInfo: { supersededBySet: new Set([ 'alert2.d_n2']), priority: 'low' } },
-                 { entityName: 'alert2.d_n2', configInfo: { supersededBySet: new Set([ ]), priority: 'low' } },
-             ] );
-             await sleepMs(100);
-             jasserteq(dataReadyCbCount, 3);
-             jasserteq(dataReadyCbReloadCount, 2);
-
-             // If a new entity is created, that results in update, which clears cache, does a refresh and
-             // then update
-             await z.setField('domain', 'd');
-             await z.setField('name', 'n3');
-             await z.setField('condition', 'off');
-             await clickWait(z.ao.shadowRoot.querySelector('ha-progress-button.createB'));
-             z.checkErr(null);
-             await sleepMs(200);
-             jasserteq(dataReadyCbCount, 3);
-             jasserteq(dataReadyCbReloadCount, 3);
-
-             z.ao.remove();
-         }
          async function doTest10() {
              let z = await initTest('alert2-overview');
-             if (0) {
-                 let yamlCfg = { alerts: [
-                     { domain: 'd', name: 'n1', condition: 'off' },
-                     { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
-                     { domain: 'd', name: 'n3', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
-                     { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ] },
-                     { domain: 'd', name: 'n5', condition: 'off', priority: 'medium' },
-                     { domain: 'd', name: 'n6', condition: 'off' },
-                     { domain: 'd', name: 'n7', condition: 'off' },
-                 ] };
-                 let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-                 jassertObjeq(tobj, {});
-             }
              const supersedeN2 = [{domain:'d',name:'n1'}];
              const supersedeN3 = [{domain:'d',name:'n1'}];
              const supersedeN4 = [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ];
@@ -1823,14 +1661,21 @@
                                     ['n4', 'n1']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 1);
-             console.log('\n\ntest');
+
+             // Supersedes picks up even off alerts if they're shown. n2 is off
              await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
                                       createState('n2', 8000, 7000, 1000, {supersedes:supersedeN2}),
                                       createState('n4', 1000, 7000, 20000, {supersedes:supersedeN4}) ],
-                                    ['n4', 'n1']);
+                                    ['n4', 'n2', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 2);
+             // Supersedes starts with the on alert, ignores a higher off superseding alert. n4 is off.
+             await createExperiment(z, [ createState('n1', 6000, 7000, 20000),
+                                      createState('n2', 5000, 7000, 20000, {supersedes:supersedeN2}),
+                                      createState('n4', 4000, 3000, 20000, {supersedes:supersedeN4}) ],
+                                    ['n2', 'n1', 'n4']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 1);
-             fuck;
              
              // supersedes doesn't apply to off alerts.  supersedes alert is off.
              await createExperiment(z, [ createState('n1', 9000, 10000, 20000),
@@ -1838,20 +1683,19 @@
                                     ['n1', 'n2']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 0);
-             // superseded alert is off
+             // superseded alert is off. it gets picked up
              await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
                                       createState('n2', 9000, 10000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
-             jasserteq(tEls.length, 0);
+             jasserteq(tEls.length, 1);
 
              await createExperiment(z, [ createState('n4', 1000, 10000, 20000, {supersedes:supersedeN4}),
                                       createState('n2', 3000, 10000, 20000, {supersedes:supersedeN2}),
                                       createState('n1', 2000, 10000, 20000) ],
                                     ['n4', 'n2', 'n1']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
-             jasserteq(tEls.length, 0);
-             fuck;
+             jasserteq(tEls.length, 2);
 
              // n2 and n3 superseded n1.  n2 and n3 should be time ordered
              await createExperiment(z, [ createState('n1', 1000, 10000, 20000),
@@ -1867,25 +1711,23 @@
              await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 4000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1'], nBelow=2);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
              await createExperiment(z, [ createState('n1', 3000, 7000, 2000),
                                       createState('n2', 5000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1'], nBelow=0);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
              await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
                                       createState('n2', 5000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
              
              z.ao.remove();
          }
          async function doTestConfig() {
              let z = await initTest('alert2-overview', {}, null);
-             if (0) {
-                 let yamlCfg = { alerts: [
-                     { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
-                     { domain: 'd', name: 'n1', condition: 'off' },
-                 ] };
-                 let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-                 jassertObjeq(tobj, {});
-             }
              const supersedeN4 = [ { domain: 'd', name: 'n1' } ];
              let tEls;
              const hrAgoMs = 60 * 60 * 1000;
@@ -1928,7 +1770,7 @@
              //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              //jassertObjeq(tobj, {});
              await createExperiment(z, [ createState('n1', 2000, 3000, 10000),
-                                         createState('n4', 1500, 3000, 10000, supersedes=supersedeN4) ],
+                                         createState('n4', 1500, 3000, 10000, {supersedes:supersedeN4}) ],
                                     ['n4', 'n1']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 1);
@@ -1938,7 +1780,7 @@
              //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              //jassertObjeq(tobj, {});
              await createExperiment(z, [ createState('n1', 2000, 3000, 10000),
-                                         createState('n4', 1500, 3000, 10000, supersedes=supersedeN4) ],
+                                         createState('n4', 1500, 3000, 10000, {supersedes:supersedeN4}) ],
                                     ['n4' ]);
              z.ao.remove();
 
@@ -1949,7 +1791,7 @@
              //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
              //jassertObjeq(tobj, {});
              await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
-                                         createState('n4', 3000, 5000, 20000, supersedes=supersedeN4) ],
+                                         createState('n4', 3000, 5000, 20000, {supersedes:supersedeN4}) ],
                                     ['n4', 'n1']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 1);
@@ -2073,6 +1915,11 @@
              smgr.removeNode('alert2.d_n1');
              jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
              jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set());
+
+             //
+             // NOTE - if add more tests here, also add then to test_t1.py::test_supersede_mgr
+             //
+             //
              
          }
         </script>
