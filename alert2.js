@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.10.3  (internal 60)';
+const VERSION = 'v1.10.3  (internal 62)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -65,6 +65,72 @@ class LRU {
     }
 }
 
+class SupersedeMgr {
+    constructor() {
+        // Map from entityId -> set( entityId )
+        this.supersedesMap = new Map();
+        this.supersededByMap = new Map();
+    }
+    addNode(entityId, supersedesList) {
+        jasserteq(typeof(entityId), 'string');
+        jassert(entityId.length > 0);
+        if (this.supersedesMap.has(entityId)) {
+            // no dups
+            return false;
+        }
+        jassert(Array.isArray(supersedesList));
+        if (supersedesList.length > 0) {
+            // cycle check
+            let supersedesSet = new Set(supersedesList);
+            let supersededBySet = this.supersededBySet(entityId);
+            for (const eid of supersedesSet) {
+                if (supersededBySet.has(eid)) {
+                    return false;
+                }
+            }
+            this.supersedesMap.set(entityId, supersedesSet);
+            for (const eid of supersedesSet) {
+                if (!this.supersededByMap.has(eid)) {
+                    this.supersededByMap.set(eid, new Set());
+                }
+                this.supersededByMap.get(eid).add(entityId);
+            }
+        } else {
+            this.supersedesMap.set(entityId, new Set());
+        }
+        return true;
+    }
+    removeNode(entityId) {
+        jassert(this.supersedesMap.has(entityId));
+        for (const eid of this.supersedesMap.get(entityId)) {
+            this.supersededByMap.get(eid).delete(entityId);
+            if (this.supersededByMap.get(eid).size == 0) {
+                this.supersededByMap.delete(eid);
+            }
+        }
+        this.supersedesMap.delete(entityId)
+    }
+    supersededBySet(entityId) {
+        let rez = new Set();
+        let visitSet = new Set();
+        if (this.supersededByMap.has(entityId)) {
+            visitSet.add( entityId );
+        }
+        while (visitSet.size > 0) {
+            let eid = visitSet.values().next().value;
+            visitSet.delete(eid);
+            if (this.supersededByMap.has(eid)) {
+                for (const eid2 of this.supersededByMap.get(eid)) {
+                    // This may visit a node multiple but finite times if the graph is diamond shaped
+                    rez.add(eid2);
+                    visitSet.add(eid2);
+                }
+            }
+        }
+        return rez;
+    }
+}
+
 //
 // updateCb called with isReload true or false indicating if it's a full reload, or just update to what
 // already we know of.
@@ -101,6 +167,12 @@ class DisplayConfigMonitor {
         }
         // We'll let the cb figure out correct entity set and call addConfigInfo to trigger refresh
         this._updateCb(true); // isReload=true
+    }
+    shutdown() {
+        this.subscribeInProgress = true; // so don't resubscribe in a timeout
+        if (this._unsubFunc) {
+            this._unsubFunc();
+        }
     }
     async checkSubscription() {
         if (!this.hass) { return; }
@@ -207,8 +279,10 @@ class DisplayValMonitor {
         this.monMap[entity_id].addChangeCb(changeCb);
     }
     removeChangeCb(entity_id, changeCb) {
-        this.monMap[entity_id].removeChangeCb(changeCb);
-        this.removeEmptiesD();
+        if (this.monMap[entity_id]) {
+            this.monMap[entity_id].removeChangeCb(changeCb);
+            this.removeEmptiesD();
+        } // else I think we already shutdown
     }
     removeEmpties() {
         for (const [entity_id, aValMon] of Object.entries(this.monMap)) {
@@ -216,6 +290,12 @@ class DisplayValMonitor {
                 delete this.monMap[entity_id];
             }
         }
+    }
+    shutdown() {
+        for (const entity_id in this.monMap) {
+            this.monMap[entity_id].shutdown();
+        }
+        this.monMap = {}
     }
 }
 
@@ -255,6 +335,14 @@ class SingleDisplayValMonitor {
                 this.checkDisplayMsg();
             }, 3000);
         }
+    }
+    shutdown() {
+        if (this._unsubFunc) {
+            this._unsubFunc();
+        }
+        this._unsubFunc = null;
+        this._subscribeInProgress = true; // to prevent resubscribing
+        this._changeCbs = [];
     }
     updateHass(newHass) {
         let oldHass = this.hass;
@@ -441,16 +529,8 @@ class Alert2Overview extends LitElement {
         // Check for entities aging out of UI window 6 times each selected interval.
         // e.g., 6 times ever 4 hours
         this._updateIntervalFactor = 6;
-
-        this._displayValMonitor = new DisplayValMonitor();
-        let aCb = (isReload) =>{
-            if (isReload) {
-                this.slowedUpdate(isReload);
-            } else {
-                this.resort(this._sortedDispInfos);
-            }
-        }
-        this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
+        this._displayConfigMonitor = null;
+        this._displayValMonitor = null;
     }
     // Rate limit how often jrefresh is called.
     // rerunIsReload can be in 3 states:
@@ -483,13 +563,29 @@ class Alert2Overview extends LitElement {
                 elem.hass = this._hass;
             });
         }
-        this._displayValMonitor.updateHass(newHass);
-        this._displayConfigMonitor.updateHass(newHass);
-
+        if (this._displayValMonitor) {
+            this._displayValMonitor.updateHass(newHass);
+        }
+        if (this._displayConfigMonitor) {
+            this._displayConfigMonitor.updateHass(newHass);
+        }
         this.slowedUpdate(false);
     }
     connectedCallback() {
         super.connectedCallback();
+        let aCb = (isReload) =>{
+            if (isReload) {
+                this.slowedUpdate(isReload);
+            } else {
+                this.resort(this._sortedDispInfos);
+            }
+        }
+        this._displayValMonitor = new DisplayValMonitor();
+        this._displayConfigMonitor = new DisplayConfigMonitor(aCb);
+        if (this._hass) {
+            this._displayValMonitor.updateHass(this._hass);
+            this._displayConfigMonitor.updateHass(this._hass);
+        }
         this.restartUpdateTimer();
     }
     disconnectedCallback() {
@@ -501,6 +597,14 @@ class Alert2Overview extends LitElement {
             this._updateCooldown.timer = undefined;
         }
         //this._displayValMonitor.disconnectedCallback();
+        if (this._displayValMonitor) {
+            this._displayValMonitor.shutdown();
+            this._displayValMonitor = null;
+        }
+        if (this._displayConfigMonitor) {
+            this._displayConfigMonitor.shutdown();
+            this._displayConfigMonitor = null;
+        }
     }
     setConfig(config) {
         this._config = config;
@@ -798,8 +902,40 @@ class Alert2Overview extends LitElement {
         if (!forceBigRefresh) {
             return;
         }
-
         //console.log('doing big refresh');
+
+        // Supersedes processing
+        //
+        // Create map of domain,name to entity_id
+        let dnToKey = (d, n) => { return `d=${d},n=${n}`; }
+        let entIdMap = new Map();
+        for (let entityName in this._hass.states) {
+            if (entityName.startsWith('alert2.')) {
+                let stateObj = this._hass.states[entityName];
+                entIdMap.set(dnToKey(stateObj.attributes.domain, stateObj.attributes.name), entityName);
+            }
+        }
+        let supersedeMgr = new SupersedeMgr();
+        for (let entityName in this._hass.states) {
+            if (entityName.startsWith('alert2.')) {
+                let stateObj = this._hass.states[entityName];
+                // looks like supersedes is an array
+                if (Object.hasOwn(stateObj.attributes, 'supersedes')) {
+                    let sList = [];
+                    stateObj.attributes.supersedes.forEach((el) => {
+                        jassert(el.domain && el.name, el, entityName);
+                        let key = dnToKey(el.domain, el.name);
+                        if (entIdMap.has(key)) {
+                            let entId = entIdMap.get(key);
+                            sList.push(entId);
+                        }
+                    });
+                    supersedeMgr.addNode(entityName, sList);
+                    //console.log('supersedes', entityName, stateObj.attributes.supersedes, typeof(stateObj.attributes.supersedes));
+                }
+            }
+        }
+        console.log('refresh', this._hass.states, supersedeMgr.supersedesMap, supersedeMgr.supersededByMap);
         
         this._alert2StatesMap.clear();
         for (let entityName in this._hass.states) {
@@ -888,7 +1024,9 @@ class Alert2Overview extends LitElement {
                 const isOldUnacked = !isAcked && testMs > 0;
                 if (isOn || (isOldUnacked && includeOldUnacked) || intervalStartMs < testMs || not_enabled) {
                     if (!filterRegex || filterRegex.test(entityName)) {
-                        entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName } );
+                        let supersededBySet = supersedeMgr.supersededBySet(entityName);
+                        entDispInfos.push({ isOn:isOn, isAcked:isAcked, testMs:testMs, entityName:entityName,
+                                            supersededBySet: supersededBySet } );
                     }
                 }
             }
@@ -909,26 +1047,33 @@ class Alert2Overview extends LitElement {
         // 
         let toPlace = new Set();
         let readyToSort = new Set();
+        let skipped = new Set();
         // We have the list of entities, now get any cached display config info
         // This will also start fetch of missing config infos. When that's done, it'll
         // trigger a call to resort()
-        this._displayConfigMonitor.addConfigInfo(entDispInfos);
+        if (this._displayConfigMonitor) {
+            this._displayConfigMonitor.addConfigInfo(entDispInfos);
+        }
         let readyToSortDispInfos = [];
+        
         entDispInfos.forEach((el)=> {
-            if (el.configInfo && el.configInfo.supersededBySet) {
-                // If el is superseded by an ent we're displaying and that is on, mark it
-                for (const anId of el.configInfo.supersededBySet) {
-                    if (Object.hasOwn(allIds, anId) && allIds[anId].isOn) {
+            // If el is superseded by an ent we're displaying and that is on, mark it
+            for (const anId of el.supersededBySet) {
+                if (Object.hasOwn(allIds, anId) && allIds[anId].isOn) {
+                    if (this._config && isTruthy(this._config.hide_superseded)) {
+                        skipped.add(el.entityName);
+                    } else {
                         toPlace.add(el.entityName);
                         el.isSuperseded = true;
-                        return;
                     }
+                    return;
                 }
             }
             el.isSuperseded = false;
             readyToSort.add(el.entityName);
             readyToSortDispInfos.push(el);
         });
+        console.log('refreshss', readyToSort, toPlace, skipped);
         
         //
         // 2. Sort the readyToSort entities
@@ -961,7 +1106,7 @@ class Alert2Overview extends LitElement {
             for (const candidateId of toPlace) {
                 let dispInfo = allIds[candidateId];
                 //console.log('considering placing', dispInfo.entityName);
-                for (const anId of dispInfo.configInfo.supersededBySet) {
+                for (const anId of dispInfo.supersededBySet) {
                     if (toPlace.has(anId)) {
                         // candidate is supserseded by another element in toPlace, so skip it for now.
                         //console.log('   entity is superseded by element yet to be placed: ', anId);
@@ -973,7 +1118,7 @@ class Alert2Overview extends LitElement {
                 //console.log('    will now place');
                 for (let idx = sortedDispInfos.length - 1 ; idx >= 0 ; idx--) {
                     let tinfo = sortedDispInfos[idx];
-                    if (dispInfo.configInfo.supersededBySet.has(tinfo.entityName) && tinfo.isOn) {
+                    if (dispInfo.supersededBySet.has(tinfo.entityName) && tinfo.isOn) {
                         // insert it
                         found = true;
                         sortedDispInfos.splice(idx+1, 0, dispInfo);
@@ -987,7 +1132,7 @@ class Alert2Overview extends LitElement {
         }
         // make sure we placed everything
         jassert(sortedDispInfos.length >= 0 && Object.keys(allIds).length >= 0, 'type error for', sortedDispInfos, Object.keys(allIds));
-        jassert(sortedDispInfos.length == Object.keys(allIds).length, 'not all supersedes were places', sortedDispInfos, allIds);
+        jassert(sortedDispInfos.length + skipped.size == (Object.keys(allIds).length), 'not all supersedes were places', sortedDispInfos, allIds, skipped);
         
         let doUpdate = false;
         if (sortedDispInfos.length !== this._sortedDispInfos.length) {
@@ -2100,6 +2245,7 @@ class Alert2Tools {
     static set debounceMs(v) { gDebounceMs = v; }
     static get DisplayValMonitor() { return DisplayValMonitor; }
     static get DisplayConfigMonitor() { return DisplayConfigMonitor; }
+    static get SupersedeMgr() { return SupersedeMgr; }
 };
 customElements.define('alert2-tools', Alert2Tools);
 
@@ -2201,7 +2347,7 @@ class Alert2Manager extends LitElement {
                     alist.push(html`<div class="anent" @click=${(ev)=>{ this.entClick(ev, el);}}>${el.id}</div>`);
                     if (el.id.startsWith('sensor.alert2generator_')) {
                         let stateObj = this._hass.states[el.id];
-                        console.log(el.id, stateObj);
+                        //console.log(el.id, stateObj);
                         if (stateObj && Object.hasOwn(stateObj.attributes, 'generated_ids')) {
                             let ids = stateObj.attributes['generated_ids'];
                             let entsHtml = [];

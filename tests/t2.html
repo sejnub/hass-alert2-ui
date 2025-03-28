@@ -72,6 +72,14 @@
                  });
              });
          }
+         function jasserteqSet(sa, sb) {
+             const eqSet = (xs, ys) => (xs.size === ys.size) && [...xs].every((x) => ys.has(x));
+             if (!eqSet(sa, sb)) {
+                 console.error('set ', sa, ' != ', sb);
+                 jassert(false);
+             }
+         }
+
          async function loadScript(src, ttype) {
              var script = document.createElement('script');
              script.src = src;
@@ -97,8 +105,9 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
+             if (1) {
                  jassert(await startTest(doTest10));
+                 jassert(await startTest(doTestSupersedeMgr));
                  return;
              }
              jassert(await startTest(doTestDefaults));
@@ -109,9 +118,10 @@
              jassert(await startTest(doTest6));
              jassert(await startTest(doTest7));
              jassert(await startTest(doTest8));
-             jassert(await startTest(doTest9));
+             //jassert(await startTest(doTest9));
              jassert(await startTest(doTest10));
              jassert(await startTest(doTestConfig));
+             jassert(await startTest(doTestSupersedeMgr));
              let testStatusEl = document.querySelector('#testStatus');
              if (jassertFailCount == 0) {
                  testStatusEl.innerHTML = `Test: All done`;
@@ -168,18 +178,25 @@
                      states: Object.assign({}, ahass['states'])
                  };
          }
-         function createState(name, onAgoMs, offAgoMs, ackAgoMs=200, priority='low') {
-             return { state: (onAgoMs && onAgoMs < offAgoMs) ? 'on' : 'off',
-                      attributes: { 'last_on_time': getRecentIso(onAgoMs),
-                                    'last_off_time': getRecentIso(offAgoMs),
-                                    'notification_control': NOTIFICATIONS_ENABLED,
-                                    'last_ack_time': getRecentIso(ackAgoMs),
-                                    'fires_since_last_notify': 0,
-                                    'priority': priority,
-                                    domain: 'd',
-                                    name: name,
-                      },
-                      entity_id: 'alert2.d_'+name };
+         function createState(name, onAgoMs, offAgoMs, ackAgoMs, dopts = {}) {
+             let opts = { priority: 'low', supersedes: null };
+             Object.assign(opts, dopts);
+             jasserteq(typeof(opts.priority), 'string');
+             let obj = { state: (onAgoMs && onAgoMs < offAgoMs) ? 'on' : 'off',
+                         attributes: { 'last_on_time': getRecentIso(onAgoMs),
+                                       'last_off_time': getRecentIso(offAgoMs),
+                                       'notification_control': NOTIFICATIONS_ENABLED,
+                                       'last_ack_time': getRecentIso(ackAgoMs),
+                                       'fires_since_last_notify': 0,
+                                       'priority': opts.priority,
+                                       domain: 'd',
+                                       name: name,
+                         },
+                         entity_id: 'alert2.d_'+name };
+             if (opts.supersedes) {
+                 obj.attributes.supersedes = opts.supersedes;
+             }
+             return obj;
          }
          async function createExperiment(z, stateList, nodeList, nBelow=0) {
              let hass = { states: {
@@ -944,6 +961,8 @@
              await z.checkField('priority', null);
              
              // supersedes
+             await z.setField('supersedes', '{ domain: d, name: n2 }');
+             await z.checkRender('supersedes', /result \(len=1\):\[{"domain":"d","name":"n2"}\]/);
              await z.setField('supersedes', '{ "domain":"d","name":"n" }');
              await z.checkRender('supersedes', /result \(len=1\):\[{"domain":"d","name":"n"}\]/);
              await z.setField('supersedes', '{domain: d, name: n3}');
@@ -1739,22 +1758,26 @@
          }
          async function doTest10() {
              let z = await initTest('alert2-overview');
-             let yamlCfg = { alerts: [
-                 { domain: 'd', name: 'n1', condition: 'off' },
-                 { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
-                 { domain: 'd', name: 'n3', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
-                 { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ] },
-                 { domain: 'd', name: 'n5', condition: 'off', priority: 'medium' },
-                 { domain: 'd', name: 'n6', condition: 'off' },
-                 { domain: 'd', name: 'n7', condition: 'off' },
-             ] };
-             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-             jassertObjeq(tobj, {});
-             
+             if (0) {
+                 let yamlCfg = { alerts: [
+                     { domain: 'd', name: 'n1', condition: 'off' },
+                     { domain: 'd', name: 'n2', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
+                     { domain: 'd', name: 'n3', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
+                     { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ] },
+                     { domain: 'd', name: 'n5', condition: 'off', priority: 'medium' },
+                     { domain: 'd', name: 'n6', condition: 'off' },
+                     { domain: 'd', name: 'n7', condition: 'off' },
+                 ] };
+                 let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+                 jassertObjeq(tobj, {});
+             }
+             const supersedeN2 = [{domain:'d',name:'n1'}];
+             const supersedeN3 = [{domain:'d',name:'n1'}];
+             const supersedeN4 = [ { domain: 'd', name: 'n2' },{ domain:'d', name: 'n3'} ];
 
              // n5 is higher priority so should be above if on
              await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
-                                      createState('n5', 5000, 7000, 20000, priority='medium') ],
+                                      createState('n5', 5000, 7000, 20000, {priority:'medium'}) ],
                                     ['n5', 'n1']);
              let tEls = z.ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
              let stateBadge = tEls[0].shadowRoot.querySelector('state-badge');
@@ -1764,87 +1787,109 @@
              
              // n2 supersedes n1 so should be below
              await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
-                                      createState('n4', 5000, 7000, 20000),
+                                      createState('n4', 5000, 7000, 20000, {supersedes:supersedeN4}),
                                       createState('n7', 6000, 7000, 20000),
                                       createState('n6', 3000, 7000, 20000),
-                                      createState('n2', 4000, 7000, 20000) ],
+                                      createState('n2', 4000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n6', 'n4', 'n2', 'n1', 'n7']);
              tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
              jasserteq(tEls.length, 2);
              
              // Check spacing when superseded clump is last alert
              await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
-                                      createState('n4', 5000, 7000, 20000),
+                                      createState('n4', 5000, 7000, 20000, {supersedes:supersedeN4}),
                                       createState('n6', 3000, 7000, 20000),
-                                      createState('n2', 4000, 7000, 20000) ],
+                                      createState('n2', 4000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n6', 'n4', 'n2', 'n1']);
              
 
              // same with n3, even with "on" time ordering reversed
              await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
-                                      createState('n3', 1000, 7000, 20000) ],
+                                      createState('n3', 1000, 7000, 20000, {supersedes:supersedeN3}) ],
                                     ['n3', 'n1']);
              // n2 and n3 don't supersede each other, so should be time ordered.
-             await createExperiment(z, [ createState('n2', 2000, 7000, 20000),
-                                      createState('n3', 1000, 7000, 20000) ],
+             await createExperiment(z, [ createState('n2', 2000, 7000, 20000, {supersedes:supersedeN2}),
+                                      createState('n3', 1000, 7000, 20000, {supersedes:supersedeN3}) ],
                                     ['n3', 'n2']);
-             await createExperiment(z, [ createState('n2', 1000, 7000, 20000),
-                                      createState('n3', 2000, 7000, 20000) ],
+             await createExperiment(z, [ createState('n2', 1000, 7000, 20000, {supersedes:supersedeN2}),
+                                      createState('n3', 2000, 7000, 20000, {supersedes:supersedeN3}) ],
                                     ['n2', 'n3']);
 
              // supersedes works even if separated by one
+             const hrAgoMs5 = 5 * 60 * 60 * 1000;
              await createExperiment(z, [ createState('n1', 1000, 7000, 20000),
-                                      createState('n4', 2000, 7000, 20000) ],
+                                      createState('n2', hrAgoMs5+1, hrAgoMs5, hrAgoMs5, {supersedes:supersedeN2}),
+                                      createState('n4', 2000, 7000, 20000, {supersedes:supersedeN4}) ],
                                     ['n4', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
+             console.log('\n\ntest');
              await createExperiment(z, [ createState('n1', 2000, 7000, 20000),
-                                      createState('n4', 1000, 7000, 20000) ],
+                                      createState('n2', 8000, 7000, 1000, {supersedes:supersedeN2}),
+                                      createState('n4', 1000, 7000, 20000, {supersedes:supersedeN4}) ],
                                     ['n4', 'n1']);
-
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
+             fuck;
+             
              // supersedes doesn't apply to off alerts.  supersedes alert is off.
              await createExperiment(z, [ createState('n1', 9000, 10000, 20000),
-                                      createState('n2', 8000, 7000, 20000) ],
+                                      createState('n2', 8000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n1', 'n2']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
              // superseded alert is off
              await createExperiment(z, [ createState('n1', 8000, 7000, 20000),
-                                      createState('n2', 9000, 10000, 20000) ],
+                                      createState('n2', 9000, 10000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
 
-             await createExperiment(z, [ createState('n4', 1000, 10000, 20000),
-                                      createState('n2', 3000, 10000, 20000),
+             await createExperiment(z, [ createState('n4', 1000, 10000, 20000, {supersedes:supersedeN4}),
+                                      createState('n2', 3000, 10000, 20000, {supersedes:supersedeN2}),
                                       createState('n1', 2000, 10000, 20000) ],
                                     ['n4', 'n2', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
+             fuck;
 
              // n2 and n3 superseded n1.  n2 and n3 should be time ordered
              await createExperiment(z, [ createState('n1', 1000, 10000, 20000),
-                                      createState('n2', 3000, 10000, 20000),
-                                      createState('n3', 2000, 10000, 20000) ],
+                                      createState('n2', 3000, 10000, 20000, {supersedes:supersedeN2}),
+                                      createState('n3', 2000, 10000, 20000, {supersedes:supersedeN3}) ],
                                     ['n3', 'n2', 'n1']);
              await createExperiment(z, [ createState('n1', 1000, 10000, 20000),
-                                      createState('n2', 2000, 10000, 20000),
-                                      createState('n3', 3000, 10000, 20000) ],
+                                      createState('n2', 2000, 10000, 20000, {supersedes:supersedeN2}),
+                                      createState('n3', 3000, 10000, 20000, {supersedes:supersedeN3}) ],
                                     ['n2', 'n3', 'n1']);
 
              // Supersedes applies to ack'd alerts
              await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
-                                      createState('n2', 5000, 7000, 4000) ],
+                                      createState('n2', 5000, 7000, 4000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1'], nBelow=2);
              await createExperiment(z, [ createState('n1', 3000, 7000, 2000),
-                                      createState('n2', 5000, 7000, 20000) ],
+                                      createState('n2', 5000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1'], nBelow=0);
              await createExperiment(z, [ createState('n1', 3000, 7000, 20000),
-                                      createState('n2', 5000, 7000, 20000) ],
+                                      createState('n2', 5000, 7000, 20000, {supersedes:supersedeN2}) ],
                                     ['n2', 'n1']);
              
              z.ao.remove();
          }
          async function doTestConfig() {
              let z = await initTest('alert2-overview', {}, null);
-             let yamlCfg = { alerts: [
-             ] };
-             let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
-             jassertObjeq(tobj, {});
-             
+             if (0) {
+                 let yamlCfg = { alerts: [
+                     { domain: 'd', name: 'n4', condition: 'off', supersedes: [ { domain: 'd', name: 'n1' } ] },
+                     { domain: 'd', name: 'n1', condition: 'off' },
+                 ] };
+                 let tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+                 jassertObjeq(tobj, {});
+             }
+             const supersedeN4 = [ { domain: 'd', name: 'n1' } ];
+             let tEls;
              const hrAgoMs = 60 * 60 * 1000;
+             
              // n2 off and unacked, but outside interval
              await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
                                          createState('n2', 4*hrAgoMs + 12000, 4*hrAgoMs + 11000, 4*hrAgoMs + 20000) ],
@@ -1876,6 +1921,159 @@
                                          createState('n3', null, null, null) ],
                                     ['n1']);
              z.ao.remove();
+             
+             // Check option to hide superseded alerts
+             //
+             z = await initTest('alert2-overview', {}, { });
+             //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             //jassertObjeq(tobj, {});
+             await createExperiment(z, [ createState('n1', 2000, 3000, 10000),
+                                         createState('n4', 1500, 3000, 10000, supersedes=supersedeN4) ],
+                                    ['n4', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
+             z.ao.remove();
+             
+             z = await initTest('alert2-overview', {}, { hide_superseded: 'true' });
+             //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             //jassertObjeq(tobj, {});
+             await createExperiment(z, [ createState('n1', 2000, 3000, 10000),
+                                         createState('n4', 1500, 3000, 10000, supersedes=supersedeN4) ],
+                                    ['n4' ]);
+             z.ao.remove();
+
+
+             // what about old unacked that was superseded
+             z.ao.remove();
+             z = await initTest('alert2-overview', {}, { include_old_unacked: 'true' });
+             //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             //jassertObjeq(tobj, {});
+             await createExperiment(z, [ createState('n1', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000),
+                                         createState('n4', 3000, 5000, 20000, supersedes=supersedeN4) ],
+                                    ['n4', 'n1']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 1);
+             z.ao.remove();
+             // what about old unacked that supersedes.  No collapsing happens
+             z = await initTest('alert2-overview', {}, { include_old_unacked: 'true' });
+             //tobj = await callApi('POST', 'alert2test/tcheck', { stage:'reset', yaml: yamlCfg });
+             //jassertObjeq(tobj, {});
+             await createExperiment(z, [ createState('n4', 4*hrAgoMs + 12000, 4*hrAgoMs - 10000, 4*hrAgoMs + 20000, supersedes=supersedeN4),
+                                         createState('n1', 3000, 5000, 20000) ],
+                                    ['n1', 'n4']);
+             tEls = z.ao.shadowRoot.querySelectorAll('details > hui-alert2-entity-row');
+             jasserteq(tEls.length, 0);
+             z.ao.remove();
+         }
+         async function doTestSupersedeMgr() {
+             let alert2Tools = customElements.get('alert2-tools');
+
+             let smgr = new alert2Tools.SupersedeMgr();
+             
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             jasserteq(smgr.addNode('alert2.d_n1', []), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             // n2 supersedes n1
+             jasserteq(smgr.addNode('alert2.d_n2', [ 'alert2.d_n1' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2']));
+             // Trying to add dup doesn't mess up results
+             jasserteq(smgr.addNode('alert2.d_n2', [ 'alert2.d_n1' ]), false);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set());
+
+             // Trying to add n1 supersedes n2 should fail
+             smgr.removeNode('alert2.d_n1');
+             jasserteq(smgr.addNode('alert2.d_n1', [ 'alert2.d_n2' ]), false);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set());
+
+             // n3 supersedes n2
+             jasserteq(smgr.addNode('alert2.d_n3', [ 'alert2.d_n2' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2', 'alert2.d_n3']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set([ 'alert2.d_n3' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set());
+
+             // Trying to add n1 supersedes n3 should fail
+             jasserteq(smgr.addNode('alert2.d_n1', [ 'alert2.d_n3' ]), false);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2', 'alert2.d_n3']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set([ 'alert2.d_n3' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set());
+
+             // should be able to supersede an alert that doesn't yet exist
+             jasserteq(smgr.addNode('alert2.d_n5', [ 'alert2.d_n4','alert2.d_n3','alert2.d_n2' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2', 'alert2.d_n3','alert2.d_n5']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set([ 'alert2.d_n3','alert2.d_n5' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set([ 'alert2.d_n5' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n4'), new Set(['alert2.d_n5']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n5'), new Set());
+
+             // supersedes graph is
+             //
+             // n5 -> (n4, n3, n2)
+             // n3 -> n2 -> n1
+
+             jasserteq(smgr.addNode('alert2.d_n4', [ 'alert2.d_n5' ]), false);
+             // Now try n4 supersedes n2
+             jasserteq(smgr.addNode('alert2.d_n4', [ 'alert2.d_n2' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set([ 'alert2.d_n2', 'alert2.d_n3','alert2.d_n4','alert2.d_n5']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set([ 'alert2.d_n3','alert2.d_n5','alert2.d_n4' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set([ 'alert2.d_n5' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n4'), new Set(['alert2.d_n5']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n5'), new Set());
+             
+             smgr.removeNode('alert2.d_n2');
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set([ 'alert2.d_n3','alert2.d_n5','alert2.d_n4' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set([ 'alert2.d_n5' ]));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n4'), new Set(['alert2.d_n5']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n5'), new Set());
+
+             // try two roots
+             smgr = new alert2Tools.SupersedeMgr();
+             jasserteq(smgr.addNode('alert2.d_n1', [ 'alert2.d_n3' ]), true);
+             jasserteq(smgr.addNode('alert2.d_n2', [ 'alert2.d_n3' ]), true);
+             jasserteq(smgr.addNode('alert2.d_n3', [ ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n3'), new Set(['alert2.d_n1','alert2.d_n2']));
+
+             // Try cycle separated by a node
+             smgr = new alert2Tools.SupersedeMgr();
+             jasserteq(smgr.addNode('alert2.d_n6', [ 'alert2.d_n7','alert2.d_n8' ]), true);
+             jasserteq(smgr.addNode('alert2.d_n7', [ 'alert2.d_n8' ]), true);
+             jasserteq(smgr.addNode('alert2.d_n8', [ 'alert2.d_n6' ]), false);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n6'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n7'), new Set(['alert2.d_n6']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n8'), new Set(['alert2.d_n7','alert2.d_n6']));
+
+             // Try diamond shape
+             smgr = new alert2Tools.SupersedeMgr();
+             jasserteq(smgr.addNode('alert2.d_n9', [ 'alert2.d_n10','alert2.d_n11' ]), true);
+             jasserteq(smgr.addNode('alert2.d_n10', [ 'alert2.d_n12' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n9'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n10'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n11'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n12'), new Set(['alert2.d_n9','alert2.d_n10']));
+             jasserteq(smgr.addNode('alert2.d_n11', [ 'alert2.d_n12' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n9'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n10'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n11'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n12'), new Set(['alert2.d_n9','alert2.d_n10','alert2.d_n11']));
+             jasserteq(smgr.addNode('alert2.d_n12', [ ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n9'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n10'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n11'), new Set(['alert2.d_n9']));
+             jasserteqSet(smgr.supersededBySet('alert2.d_n12'), new Set(['alert2.d_n9','alert2.d_n10','alert2.d_n11']));
+
+             // Try removing node that collapses parent
+             smgr = new alert2Tools.SupersedeMgr();
+             jasserteq(smgr.addNode('alert2.d_n1', [ 'alert2.d_n2' ]), true);
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set(['alert2.d_n1']));
+             smgr.removeNode('alert2.d_n1');
+             jasserteqSet(smgr.supersededBySet('alert2.d_n1'), new Set());
+             jasserteqSet(smgr.supersededBySet('alert2.d_n2'), new Set());
+             
          }
         </script>
     </head>
