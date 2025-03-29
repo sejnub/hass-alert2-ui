@@ -1926,11 +1926,12 @@
          async function doTestInternal() {
              z = await initTest('alert2-create');
              await sleepMs(10); // seems to help dom get itself sorted out
-             z.checkDefault('throttle_fires_per_mins', null);
+             z.checkDefault('throttle_fires_per_mins', /Default if empty: ""/);
              await z.setField('domain', 'alert2');
              await z.setField('name', 'global_exception');
-             z.checkDefault('throttle_fires_per_mins', /foobar/);
-             
+             z.checkDefault('throttle_fires_per_mins', /Default if empty: \[\d+,\d+\]/);
+
+             z.ao.remove();
          }
         </script>
     </head>
