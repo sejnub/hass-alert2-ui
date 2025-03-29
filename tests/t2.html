@@ -105,8 +105,8 @@
              testDiv = document.querySelector('#testDiv');
              let alert2Tools = customElements.get('alert2-tools');
              alert2Tools.debounceMs = 1;
-             if (0) {
-                 jassert(await startTest(doTest6));
+             if (1) {
+                 jassert(await startTest(doTestInternal));
                  //jassert(await startTest(doTestSupersedeMgr));
                  return;
              }
@@ -1920,6 +1920,15 @@
              // NOTE - if add more tests here, also add then to test_t1.py::test_supersede_mgr
              //
              //
+             
+         }
+         async function doTestInternal() {
+             z = await initTest('alert2-create');
+             await sleepMs(10); // seems to help dom get itself sorted out
+             z.checkDefault('throttle_fires_per_mins', null);
+             await z.setField('domain', 'alert2');
+             await z.setField('name', 'global_exception');
+             z.checkDefault('throttle_fires_per_mins', /foobar/);
              
          }
         </script>
