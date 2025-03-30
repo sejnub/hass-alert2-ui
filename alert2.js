@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.10.3  (internal 62)';
+const VERSION = 'v1.11  (internal 63)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -799,7 +799,10 @@ class Alert2Overview extends LitElement {
             }
         }
         const endMs = Date.now();
-        console.log(`Recalculating supersedes took ${endMs-startMs} ms`);
+        if (!this._logCount) { this._logCount = 0; } this._logCount++;
+        if (this._logCount < 10) {
+            console.log(`${this._logCount} Recalculating supersedes took ${endMs-startMs} ms`);
+        }
         //console.log('refresh', this._hass.states, supersedeMgr.supersedesMap, supersedeMgr.supersededByMap);
         
         this._alert2StatesMap.clear();
@@ -3225,6 +3228,16 @@ class Alert2Create extends LitElement {
         entName = slugify(entName);
         let yaml = this.configToYaml();
 
+        let throttle_defaults = this._topConfigs.raw.defaults;
+        if (this.alertCfg.domain == 'alert2' && this.alertCfg.name == 'global_exception' && this._topConfigs.raw.tracked) {
+            for (const el of this._topConfigs.raw.tracked) {
+                if (el.domain == this.alertCfg.domain && el.name == this.alertCfg.name && Object.hasOwn(el, 'throttle_fires_per_mins')) {
+                    throttle_defaults = el;
+                    break;
+                }
+            }
+        }
+        
         return html`
          <div class="container">
          <div class="ifields">
@@ -3351,7 +3364,7 @@ class Alert2Create extends LitElement {
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.data}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="throttle_fires_per_mins" type=${FieldTypes.STR}
-                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${this._topConfigs.raw.defaults}
+                 @expand-click=${this.expandClick} @change=${this._change} .defaultP=${throttle_defaults}
                   .savedP=${{}} .currP=${this.alertCfg} .genResult=${this._generatorResult} >
                <div slot="help">${helpCommon.throttle_fires_per_mins}</div></alert2-cfg-field>
             <alert2-cfg-field .hass=${this.hass} name="reminder_frequency_mins" type=${FieldTypes.STR}
