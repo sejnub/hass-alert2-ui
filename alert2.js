@@ -4,7 +4,7 @@ const css = LitElement.prototype.css;
 const NOTIFICATIONS_ENABLED  = 'enabled'
 const NOTIFICATIONS_DISABLED = 'disabled'
 const NOTIFICATION_SNOOZE = 'snooze'
-const VERSION = 'v1.11  (internal 63)';
+const VERSION = 'v1.11.1  (internal 64)';
 console.log(`alert2 ${VERSION}`);
 
 //let queueMicrotask =  window.queueMicrotask || ((handler) => window.setTimeout(handler, 1));
@@ -25,6 +25,12 @@ function jassert(abool, ...args) {
         jassertFailCount += 1;
         console.error('assert failed', ...args);
         throw new Error("assert failed");
+    }
+}
+function jasserteq(a, b) {
+    if (a !== b) {
+        jassertFailCount += 1;
+        throw new Error(`assert failed "${a}" != "${b}"`);
     }
 }
 // unused
@@ -935,7 +941,7 @@ class Alert2Overview extends LitElement {
             readyToSort.add(el.entityName);
             readyToSortDispInfos.push(el);
         });
-        console.log('refreshss', readyToSort, toPlace, skipped);
+        //console.log('refreshss', readyToSort, toPlace, skipped);
         
         //
         // 2. Sort the readyToSort entities
