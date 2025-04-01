@@ -8,5 +8,7 @@
     "zip_release": true,
     "hacs": "1.6.0",
     "version": "1.11.100",
-    "url": "https://github.com/sejnub/hass-alert2-ui"
+    "url": "https://github.com/sejnub/hass-alert2-ui",
+    "filename": "alert2.js",
+    "content_in_root": true
 }
