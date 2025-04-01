@@ -7,6 +7,6 @@
     "iot_standards": ["websocket"],
     "zip_release": true,
     "hacs": "1.6.0",
-    "version": "1.11.1hb",
+    "version": "1.11.1",
     "url": "https://github.com/sejnub/hass-alert2-ui"
 }
