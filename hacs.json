@@ -1,4 +1,12 @@
 {
     "name": "Alert2 UI",
-    "filename": "alert2.js"
+    "filename": "alert2.js",
+    "render_readme": true,
+    "domains": ["alert2"],
+    "homeassistant": "2023.8.0",
+    "iot_standards": ["websocket"],
+    "zip_release": true,
+    "hacs": "1.6.0",
+    "version": "1.11.1hb",
+    "url": "https://github.com/sejnub/hass-alert2-ui"
 }

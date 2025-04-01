@@ -106,6 +106,7 @@
              await startTest(doTest6);
              await startTest(doTest7, withAO=false);
              await startTest(doTest8);
+             await startTest(doTest9);
              let testStatusEl = document.querySelector('#testStatus');
              if (jassertFailCount == 0) {
                  testStatusEl.innerHTML = `Test: All done`;
@@ -585,6 +586,72 @@
              jassert(tEls[0].shadowRoot.innerHTML.includes('alert2.foo40'));
              ackbar = ao.shadowRoot.querySelector('div#ackbar');
              jassert(ackbar.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+         }
+         async function doTest9(ao, newHass) {
+             let tEls;
+             // Test manual control buttons
+             newHass = cloneHass(newHass);
+             // Create alerts with and without manual control enabled
+             newHass.states['alert2.foo50'] = createState('foo50', 1000, 2000, 10000); // on and unacked
+             newHass.states['alert2.foo51'] = createState('foo51', 1000, 2000, 100);   // off and acked
+             newHass.states['alert2.foo52'] = createState('foo52', 1000, 2000, 10000); // on and unacked
+             newHass.states['alert2.foo53'] = createState('foo53', 1000, 2000, 100);   // off and acked
+             
+             // Enable manual control for some alerts
+             newHass.states['alert2.foo50'].attributes.manual_off = true;
+             newHass.states['alert2.foo51'].attributes.manual_on = true;
+             
+             ao.hass = newHass;
+             await sleepMs(60);
+             tEls = ao.shadowRoot.querySelectorAll('hui-alert2-entity-row');
+             jasserteq(tEls.length, 4);
+             
+             // Check manual buttons are present only when enabled
+             let stateEl = tEls[0].shadowRoot.querySelector('ha-alert2-state');
+             jassert(stateEl.shadowRoot.innerHTML.includes('Manual Off')); // on state with manual_off enabled
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On'));
+             
+             stateEl = tEls[1].shadowRoot.querySelector('ha-alert2-state');
+             jassert(stateEl.shadowRoot.innerHTML.includes('Manual On')); // off state with manual_on enabled
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off'));
+             
+             stateEl = tEls[2].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off')); // on state without manual_off
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On'));
+             
+             stateEl = tEls[3].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On')); // off state without manual_on
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off'));
+             
+             // Test state changes
+             newHass = cloneHass(newHass);
+             newHass.states['alert2.foo50'] = createState('foo50', 1000, 2000, 100); // turn off
+             newHass.states['alert2.foo51'] = createState('foo51', 1000, 2000, 10000); // turn on
+             newHass.states['alert2.foo52'] = createState('foo52', 1000, 2000, 100); // turn off
+             newHass.states['alert2.foo53'] = createState('foo53', 1000, 2000, 10000); // turn on
+             
+             // Keep manual control settings
+             newHass.states['alert2.foo50'].attributes.manual_off = true;
+             newHass.states['alert2.foo51'].attributes.manual_on = true;
+             
+             ao.hass = newHass;
+             await sleepMs(60);
+             
+             stateEl = tEls[0].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off')); // now off state with manual_off
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On'));
+             
+             stateEl = tEls[1].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On')); // now on state with manual_on
+             jassert(stateEl.shadowRoot.innerHTML.includes('Manual Off'));
+             
+             stateEl = tEls[2].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off')); // now off state without manual_on
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On'));
+             
+             stateEl = tEls[3].shadowRoot.querySelector('ha-alert2-state');
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual On')); // now on state without manual_off
+             jassert(!stateEl.shadowRoot.innerHTML.includes('Manual Off'));
          }
         </script>
     </head>

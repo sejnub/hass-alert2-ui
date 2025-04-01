@@ -1273,11 +1273,13 @@ class RelativeTime extends LitElement {
 class HaAlert2State extends LitElement {
     static properties = {
         _ackInProgress: {state: true},
+        _manualControlInProgress: {state: true},
     }
     constructor() {
         super();
         this._stateObj = null;
         this._ackInProgress = false;
+        this._manualControlInProgress = false;
         this._hass = null;
     }
     set hass(ao) {
@@ -1322,6 +1324,38 @@ class HaAlert2State extends LitElement {
             abutton.actionSuccess();
         }
     }
+    async _jmanualOn(ev) {
+        await this.manualControlInternal(ev, true);
+    }
+    async _jmanualOff(ev) {
+        await this.manualControlInternal(ev, false);
+    }
+    async manualControlInternal(ev, isOn) {
+        let op = isOn ? 'manual_on' : 'manual_off';
+        console.log(`${op} clicked`, this._stateObj.entity_id);
+        this._manualControlInProgress = true;
+        let abutton = ev.target;
+        ev.stopPropagation();
+        if (1) {
+            try {
+                await this._hass.callWS({
+                    type: "execute_script",
+                    sequence: [ {
+                        service: isOn ? 'alert2.manual_on' : 'alert2.manual_off',
+                        data: {},
+                        target: { entity_id: this._stateObj.entity_id }
+                    }],
+                });
+            } catch (err) {
+                this._manualControlInProgress = false;
+                abutton.actionError();
+                showToast(this, "error: " + err.message);
+                return;
+            }
+            this._manualControlInProgress = false;
+            abutton.actionSuccess();
+        }
+    }
     render() {
         if (!this._stateObj) {
             return html`<div>loading...</div>`;
@@ -1340,7 +1374,6 @@ class HaAlert2State extends LitElement {
         if (Object.hasOwn(ent.attributes, 'last_on_time')) {
             last_fired_time = last_on_time;
             if (ent.state == 'on') {
-                //msg = 'on';
                 const last_on_time = Date.parse(ent.attributes['last_on_time']);
                 msg = html`on<j-relative-time .timestamp=${last_on_time} .useLongnames=${false} style="margin-left:0.5em;"></j-relative-time>`;
             } else if (ent.state == 'off') {
@@ -1350,7 +1383,7 @@ class HaAlert2State extends LitElement {
                 } else {
                     msg = html`off`;
                 }
-            } // else - should never happen, was checked when populated _shownEntities list.
+            }
         } else {
             if (ent.state) {
                 last_fired_time = Date.parse(ent.state);
@@ -1371,23 +1404,32 @@ class HaAlert2State extends LitElement {
                   @click=${this._jack}>Ack</ha-progress-button>
                  `;
         }
+        let manualButton = '';
+        if (ent.state == 'off' && ent.attributes.manual_on) {
+            manualButton = html`<ha-progress-button
+                  .progress=${this._manualControlInProgress}
+                  @click=${this._jmanualOn}>Manual On</ha-progress-button>
+                 `;
+        } else if (ent.state == 'on' && ent.attributes.manual_off) {
+            manualButton = html`<ha-progress-button
+                  .progress=${this._manualControlInProgress}
+                  @click=${this._jmanualOff}>Manual Off</ha-progress-button>
+                 `;
+        }
         let snoozeBadge = '';
         if (ent.attributes.notification_control == NOTIFICATIONS_ENABLED) { }
         else if (ent.attributes.notification_control == NOTIFICATIONS_DISABLED) {
             snoozeBadge = html`<div class="badge">Disabled</div>`;
         } else if (ent.attributes.notification_control) {
-            // snoozed. val is date snoozed til
             snoozeBadge = html`<div class="badge">Snoozed</div>`;
         }
         let numSince = ent.attributes.fires_since_last_notify;
         if (ent.state == 'on' && numSince > 0) {
-            // If alert is on and fires_since_last_notify > 0, then the firing must include
-            // the one that turned this on. So subtract it from the count.
             numSince -= 1;
         }
         const extraFiresBadge = (numSince == 0) ? '' : html`<div style="display: flex; align-items:center; margin-left:0.3em;">+${numSince}x</div>`;
         
-        return html`<div class="onerow">${snoozeBadge}${ackButton}</div>
+        return html`<div class="onerow">${snoozeBadge}${ackButton}${manualButton}</div>
                     <div class="onerow"><div class="curr">${msg}</div>${extraFiresBadge}</div>`;
     }
     static styles = css`
